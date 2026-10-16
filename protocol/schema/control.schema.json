@@ -1,0 +1,178 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://device-connect.local/schema/control.schema.json",
+  "title": "Control channel commands (channel 0x01)",
+  "description": "Command-specific args for requests whose cmd is defined on the control channel. Envelope rules come from envelope.schema.json. A response to a request whose code is CONFIRM_REQUIRED carries an actionId; the final result arrives later as a normal response with the same id.",
+  "$defs": {
+    "screenStartArgs": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "width": { "type": "integer", "minimum": 100, "maximum": 8192 },
+        "height": { "type": "integer", "minimum": 100, "maximum": 8192 },
+        "fps": { "type": "integer", "minimum": 1, "maximum": 60 },
+        "bitrate": { "type": "integer", "minimum": 100000, "maximum": 50000000 }
+      }
+    },
+    "screenResult": {
+      "type": "object",
+      "required": ["width", "height", "fps", "bitrate"],
+      "additionalProperties": false,
+      "properties": {
+        "width": { "type": "integer" },
+        "height": { "type": "integer" },
+        "fps": { "type": "integer" },
+        "bitrate": { "type": "integer" }
+      }
+    },
+    "xy": {
+      "type": "object",
+      "required": ["x", "y"],
+      "additionalProperties": false,
+      "properties": {
+        "x": { "type": "integer", "minimum": 0, "maximum": 10000 },
+        "y": { "type": "integer", "minimum": 0, "maximum": 10000 }
+      }
+    },
+    "swipeArgs": {
+      "type": "object",
+      "required": ["x1", "y1", "x2", "y2"],
+      "additionalProperties": false,
+      "properties": {
+        "x1": { "type": "integer", "minimum": 0, "maximum": 10000 },
+        "y1": { "type": "integer", "minimum": 0, "maximum": 10000 },
+        "x2": { "type": "integer", "minimum": 0, "maximum": 10000 },
+        "y2": { "type": "integer", "minimum": 0, "maximum": 10000 },
+        "durMs": { "type": "integer", "minimum": 10, "maximum": 10000 }
+      }
+    },
+    "scrollArgs": {
+      "type": "object",
+      "required": ["x", "y", "dx", "dy"],
+      "additionalProperties": false,
+      "properties": {
+        "x": { "type": "integer", "minimum": 0, "maximum": 10000 },
+        "y": { "type": "integer", "minimum": 0, "maximum": 10000 },
+        "dx": { "type": "integer", "minimum": -10000, "maximum": 10000 },
+        "dy": { "type": "integer", "minimum": -10000, "maximum": 10000 }
+      }
+    },
+    "textArgs": {
+      "type": "object",
+      "required": ["text"],
+      "additionalProperties": false,
+      "properties": { "text": { "type": "string", "maxLength": 10000 } }
+    },
+    "keyArgs": {
+      "type": "object",
+      "required": ["key"],
+      "additionalProperties": false,
+      "properties": {
+        "key": {
+          "type": "string",
+          "enum": ["back", "home", "recents", "power", "volume_up", "volume_down",
+                   "enter", "tab", "escape", "delete", "space",
+                   "arrow_up", "arrow_down", "arrow_left", "arrow_right"]
+        }
+      }
+    },
+    "appOpenArgs": {
+      "type": "object",
+      "required": ["package"],
+      "additionalProperties": false,
+      "properties": { "package": { "type": "string", "minLength": 1, "maxLength": 150 } }
+    },
+    "appListResult": {
+      "type": "object",
+      "required": ["apps"],
+      "additionalProperties": false,
+      "properties": {
+        "apps": {
+          "type": "array",
+          "maxItems": 2000,
+          "items": {
+            "type": "object",
+            "required": ["package", "label", "system"],
+            "additionalProperties": false,
+            "properties": {
+              "package": { "type": "string" },
+              "label": { "type": "string" },
+              "system": { "type": "boolean" }
+            }
+          }
+        }
+      }
+    },
+    "screenNode": {
+      "type": "object",
+      "required": ["id", "bounds", "cls"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "integer", "minimum": 0 },
+        "bounds": {
+          "type": "array", "minItems": 4, "maxItems": 4,
+          "items": { "type": "integer", "minimum": -10000, "maximum": 20000 }
+        },
+        "cls": { "type": "string" },
+        "text": { "type": "string", "maxLength": 10000 },
+        "desc": { "type": "string", "maxLength": 10000 },
+        "clickable": { "type": "boolean" }
+      }
+    },
+    "screenTextResult": {
+      "type": "object",
+      "required": ["text", "tree"],
+      "additionalProperties": false,
+      "properties": {
+        "text": { "type": "string", "maxLength": 200000 },
+        "tree": { "type": "array", "maxItems": 5000, "items": { "$ref": "#/$defs/screenNode" } }
+      }
+    },
+    "waitScreenArgs": {
+      "type": "object",
+      "required": ["timeoutMs"],
+      "additionalProperties": false,
+      "properties": { "timeoutMs": { "type": "integer", "minimum": 100, "maximum": 120000 } }
+    },
+    "waitScreenResult": {
+      "type": "object",
+      "required": ["changed", "hash"],
+      "additionalProperties": false,
+      "properties": {
+        "changed": { "type": "boolean" },
+        "hash": { "type": "string", "pattern": "^[0-9a-f]{16}$" }
+      }
+    },
+    "capsSetArgs": {
+      "type": "object",
+      "required": ["caps"],
+      "additionalProperties": false,
+      "properties": {
+        "caps": {
+          "type": "object",
+          "minProperties": 1,
+          "additionalProperties": { "type": "boolean" }
+        }
+      }
+    },
+    "emptyArgs": { "type": "object", "additionalProperties": false }
+  },
+  "oneOf": [
+    { "required": ["cmd"], "properties": { "cmd": { "const": "screen.start" }, "args": { "$ref": "#/$defs/screenStartArgs" } } },
+    { "required": ["cmd"], "properties": { "cmd": { "const": "screen.stop" }, "args": { "$ref": "#/$defs/emptyArgs" } } },
+    { "required": ["cmd"], "properties": { "cmd": { "const": "screen.configure" }, "args": { "$ref": "#/$defs/screenStartArgs" } } },
+    { "required": ["cmd"], "properties": { "cmd": { "const": "input.tap" }, "args": { "$ref": "#/$defs/xy" } } },
+    { "required": ["cmd"], "properties": { "cmd": { "const": "input.longpress" }, "args": { "$ref": "#/$defs/xy" } } },
+    { "required": ["cmd"], "properties": { "cmd": { "const": "input.swipe" }, "args": { "$ref": "#/$defs/swipeArgs" } } },
+    { "required": ["cmd"], "properties": { "cmd": { "const": "input.scroll" }, "args": { "$ref": "#/$defs/scrollArgs" } } },
+    { "required": ["cmd"], "properties": { "cmd": { "const": "input.text" }, "args": { "$ref": "#/$defs/textArgs" } } },
+    { "required": ["cmd"], "properties": { "cmd": { "const": "input.key" }, "args": { "$ref": "#/$defs/keyArgs" } } },
+    { "required": ["cmd"], "properties": { "cmd": { "const": "app.open" }, "args": { "$ref": "#/$defs/appOpenArgs" } } },
+    { "required": ["cmd"], "properties": { "cmd": { "const": "app.list" }, "args": { "$ref": "#/$defs/emptyArgs" } } },
+    { "required": ["cmd"], "properties": { "cmd": { "const": "screentext.get" }, "args": { "$ref": "#/$defs/emptyArgs" } } },
+    { "required": ["cmd"], "properties": { "cmd": { "const": "wait.screen" }, "args": { "$ref": "#/$defs/waitScreenArgs" } } },
+    { "required": ["cmd"], "properties": { "cmd": { "const": "security.unpair" }, "args": { "$ref": "#/$defs/emptyArgs" } } },
+    { "required": ["cmd"], "properties": { "cmd": { "const": "security.rotate" }, "args": { "$ref": "#/$defs/emptyArgs" } } },
+    { "required": ["cmd"], "properties": { "cmd": { "const": "caps.set" }, "args": { "$ref": "#/$defs/capsSetArgs" } } }
+  ]
+}

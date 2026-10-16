@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://device-connect.local/schema/clipboard.schema.json",
+  "title": "Clipboard channel (0x06)",
+  "description": "Text-only clipboard sync, explicit pull model: clipboard content is only sent in responses to clipboard.get, never pushed in events.",
+  "$defs": {
+    "getArgs": { "type": "object", "additionalProperties": false },
+    "getResult": { "type": "object", "required": ["text"], "additionalProperties": false, "properties": { "text": { "type": "string", "maxLength": 1048576 } } },
+    "setArgs": { "type": "object", "required": ["text"], "additionalProperties": false, "properties": { "text": { "type": "string", "maxLength": 1048576 } } }
+  },
+  "oneOf": [
+    { "required": ["cmd"], "properties": { "cmd": { "const": "clipboard.get" }, "args": { "$ref": "#/$defs/getArgs" } } },
+    { "required": ["cmd"], "properties": { "cmd": { "const": "clipboard.set" }, "args": { "$ref": "#/$defs/setArgs" } } },
+    { "required": ["evt"], "properties": { "evt": { "const": "clipboard.changed" }, "data": { "type": "object", "additionalProperties": false } } }
+  ]
+}

@@ -1,0 +1,86 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://device-connect.local/schema/envelope.schema.json",
+  "title": "Device Connect message envelope (JSON channels)",
+  "description": "All JSON payloads on control, notifications, messages, calls, clipboard, files, status and heartbeat channels. Carried in frames with flags bit0 (JSON_PAYLOAD) set. mtype 0x01/0x02/0x03/0x04 select request/response/event/error.",
+  "oneOf": [
+    { "$ref": "#/$defs/request" },
+    { "$ref": "#/$defs/response_ok" },
+    { "$ref": "#/$defs/response_err" },
+    { "$ref": "#/$defs/event" },
+    { "$ref": "#/$defs/unsolicited_error" }
+  ],
+  "$defs": {
+    "id": { "type": "integer", "minimum": 1, "maximum": 2147483647 },
+    "errorCode": {
+      "type": "string",
+      "enum": [
+        "UNAUTHORIZED", "NOT_PAIRED", "CAPABILITY_DISABLED",
+        "CONFIRM_REQUIRED", "RATE_LIMITED", "LOCKED_OUT", "INVALID_ARGS",
+        "NOT_FOUND", "BUSY", "UNSUPPORTED", "TRANSPORT_ERROR", "INTERNAL"
+      ]
+    },
+    "capability": {
+      "type": "string",
+      "enum": ["screen_view", "input_control", "notifications", "messages",
+               "calls", "contacts", "files", "clipboard"]
+    },
+    "request": {
+      "type": "object",
+      "required": ["id", "cmd"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "cmd": { "type": "string", "pattern": "^[a-z]+\\.[a-z_]+$" },
+        "args": { "type": "object" }
+      }
+    },
+    "response_ok": {
+      "type": "object",
+      "required": ["id", "ok"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "ok": { "const": true },
+        "result": { "type": "object" }
+      }
+    },
+    "response_err": {
+      "type": "object",
+      "required": ["id", "ok", "error"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "ok": { "const": false },
+        "error": {
+          "type": "object",
+          "required": ["code", "message"],
+          "additionalProperties": false,
+          "properties": {
+            "code": { "$ref": "#/$defs/errorCode" },
+            "message": { "type": "string", "maxLength": 500 },
+            "actionId": { "type": "string", "maxLength": 64 }
+          }
+        }
+      }
+    },
+    "event": {
+      "type": "object",
+      "required": ["evt", "data"],
+      "additionalProperties": false,
+      "properties": {
+        "evt": { "type": "string", "pattern": "^[a-z]+\\.[a-z_]+$" },
+        "data": { "type": "object" }
+      }
+    },
+    "unsolicited_error": {
+      "type": "object",
+      "required": ["code", "message"],
+      "additionalProperties": false,
+      "properties": {
+        "code": { "$ref": "#/$defs/errorCode" },
+        "message": { "type": "string", "maxLength": 500 }
+      }
+    }
+  }
+}

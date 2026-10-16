@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://device-connect.local/schema/session.schema.json",
+  "title": "Session negotiation (control channel, first messages after Noise handshake)",
+  "description": "Sent by the initiator as mtype 0x01 with cmd field 't'. These two messages use the flat shape below rather than the generic envelope; they MUST be the first messages on the control channel.",
+  "oneOf": [
+    {
+      "type": "object",
+      "required": ["pv", "t", "device", "caps"],
+      "additionalProperties": false,
+      "properties": {
+        "pv": { "const": 1 },
+        "t": { "const": "hello" },
+        "device": { "$ref": "#/$defs/device" },
+        "caps": { "type": "array", "items": { "$ref": "envelope.schema.json#/$defs/capability" }, "uniqueItems": true }
+      }
+    },
+    {
+      "type": "object",
+      "required": ["pv", "t", "device", "caps", "paired"],
+      "additionalProperties": false,
+      "properties": {
+        "pv": { "const": 1 },
+        "t": { "const": "hello_ack" },
+        "device": { "$ref": "#/$defs/device" },
+        "caps": { "type": "array", "items": { "$ref": "envelope.schema.json#/$defs/capability" }, "uniqueItems": true },
+        "paired": { "type": "boolean" }
+      }
+    }
+  ],
+  "$defs": {
+    "device": {
+      "type": "object",
+      "required": ["id", "name", "os"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string", "pattern": "^[0-9a-f]{16}$" },
+        "name": { "type": "string", "minLength": 1, "maxLength": 64 },
+        "model": { "type": "string", "maxLength": 64 },
+        "os": { "type": "string", "maxLength": 64 }
+      }
+    }
+  }
+}

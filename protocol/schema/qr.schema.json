@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://device-connect.local/schema/qr.schema.json",
+  "title": "Pairing QR payload",
+  "description": "Encoded as: dc1: + base64url(utf8(JSON)) without padding. n is 16 random bytes, base64url-encoded (22 chars). exp is unix seconds; phones MUST reject payloads older than exp (checked against their own clock with 60s slack).",
+  "type": "object",
+  "required": ["v", "n", "p", "exp"],
+  "additionalProperties": false,
+  "properties": {
+    "v": { "const": 1 },
+    "n": { "type": "string", "pattern": "^[A-Za-z0-9_-]{22}$" },
+    "p": { "type": "integer", "minimum": 1, "maximum": 65535 },
+    "h": { "type": "string", "maxLength": 253, "description": "Host name or IP literal of the PC listener. May be absent in manual mode." },
+    "exp": { "type": "integer", "minimum": 0 },
+    "name": { "type": "string", "maxLength": 64 }
+  }
+}

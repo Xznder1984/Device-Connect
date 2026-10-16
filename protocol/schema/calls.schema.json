@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://device-connect.local/schema/calls.schema.json",
+  "title": "Calls channel (0x05) commands and events",
+  "description": "Call signaling only. Audio stays on the phone: Android exposes no API to route cellular call audio to a second device.",
+  "$defs": {
+    "call": {
+      "type": "object",
+      "required": ["id", "number", "type", "time"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string", "maxLength": 100 },
+        "number": { "type": "string", "maxLength": 40 },
+        "name": { "type": "string", "maxLength": 100 },
+        "type": { "type": "string", "enum": ["incoming", "outgoing", "missed", "rejected", "blocked"] },
+        "duration": { "type": "integer", "minimum": 0 },
+        "time": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "listArgs": { "type": "object", "additionalProperties": false, "properties": { "limit": { "type": "integer", "minimum": 1, "maximum": 500 } } },
+    "listResult": { "type": "object", "required": ["items"], "additionalProperties": false, "properties": { "items": { "type": "array", "maxItems": 500, "items": { "$ref": "#/$defs/call" } } } },
+    "idArgs": { "type": "object", "required": ["id"], "additionalProperties": false, "properties": { "id": { "type": "string", "maxLength": 100 } } },
+    "dialArgs": { "type": "object", "required": ["number"], "additionalProperties": false, "properties": { "number": { "type": "string", "minLength": 1, "maxLength": 40 } } }
+  },
+  "oneOf": [
+    { "required": ["cmd"], "properties": { "cmd": { "const": "calls.list" }, "args": { "$ref": "#/$defs/listArgs" } } },
+    { "required": ["cmd"], "properties": { "cmd": { "const": "calls.answer" }, "args": { "$ref": "#/$defs/idArgs" } } },
+    { "required": ["cmd"], "properties": { "cmd": { "const": "calls.reject" }, "args": { "$ref": "#/$defs/idArgs" } } },
+    { "required": ["cmd"], "properties": { "cmd": { "const": "calls.dial" }, "args": { "$ref": "#/$defs/dialArgs" } } },
+    { "required": ["evt"], "properties": { "evt": { "const": "call.incoming" }, "data": { "$ref": "#/$defs/call" } } },
+    { "required": ["evt"], "properties": { "evt": { "const": "call.state" }, "data": { "$ref": "#/$defs/call" } } }
+  ]
+}

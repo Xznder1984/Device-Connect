@@ -1,0 +1,19 @@
+{
+  "pairs": [
+    {
+      "code": "254904",
+      "pkA": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+      "pkB": "b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2"
+    },
+    {
+      "code": "819193",
+      "pkA": "5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a",
+      "pkB": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1"
+    },
+    {
+      "code": "646076",
+      "pkA": "0000000000000000000000000000000000000000000000000000000000000000",
+      "pkB": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+    }
+  ]
+}

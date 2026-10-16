@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://device-connect.local/schema/notifications.schema.json",
+  "title": "Notifications channel (0x03) commands and events",
+  "$defs": {
+    "action": {
+      "type": "object",
+      "required": ["id", "title"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string", "maxLength": 100 },
+        "title": { "type": "string", "maxLength": 100 },
+        "replyable": { "type": "boolean" }
+      }
+    },
+    "item": {
+      "type": "object",
+      "required": ["key", "app", "title", "postTime"],
+      "additionalProperties": false,
+      "properties": {
+        "key": { "type": "string", "maxLength": 300 },
+        "app": { "type": "string", "maxLength": 150 },
+        "appLabel": { "type": "string", "maxLength": 100 },
+        "title": { "type": "string", "maxLength": 500 },
+        "text": { "type": "string", "maxLength": 4000 },
+        "postTime": { "type": "integer", "minimum": 0 },
+        "actions": { "type": "array", "maxItems": 20, "items": { "$ref": "#/$defs/action" } }
+      }
+    },
+    "listArgs": { "type": "object", "additionalProperties": false, "properties": { "limit": { "type": "integer", "minimum": 1, "maximum": 500 } } },
+    "listResult": { "type": "object", "required": ["items"], "additionalProperties": false, "properties": { "items": { "type": "array", "maxItems": 500, "items": { "$ref": "#/$defs/item" } } } },
+    "replyArgs": {
+      "type": "object",
+      "required": ["key", "text"],
+      "additionalProperties": false,
+      "properties": {
+        "key": { "type": "string", "maxLength": 300 },
+        "actionId": { "type": "string", "maxLength": 100 },
+        "text": { "type": "string", "minLength": 1, "maxLength": 4000 }
+      }
+    },
+    "dismissArgs": { "type": "object", "required": ["key"], "additionalProperties": false, "properties": { "key": { "type": "string", "maxLength": 300 } } }
+  },
+  "oneOf": [
+    { "required": ["cmd"], "properties": { "cmd": { "const": "notifications.list" }, "args": { "$ref": "#/$defs/listArgs" } } },
+    { "required": ["cmd"], "properties": { "cmd": { "const": "notifications.reply" }, "args": { "$ref": "#/$defs/replyArgs" } } },
+    { "required": ["cmd"], "properties": { "cmd": { "const": "notifications.dismiss" }, "args": { "$ref": "#/$defs/dismissArgs" } } },
+    { "required": ["evt"], "properties": { "evt": { "const": "notification.posted" }, "data": { "$ref": "#/$defs/item" } } },
+    { "required": ["evt"], "properties": { "evt": { "const": "notification.removed" }, "data": { "type": "object", "required": ["key"], "properties": { "key": { "type": "string" } } } } }
+  ]
+}

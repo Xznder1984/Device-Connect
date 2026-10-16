@@ -1,0 +1,264 @@
+{
+  "description": "Schema conformance cases shared by every platform implementation. Each case names the schema file under protocol/schema/ and the JSON instance to validate. 'valid' cases must pass, 'invalid' cases must fail. Typed request/response/event positives are covered separately by typed-messages.json.",
+  "cases": [
+    {
+      "name": "session_hello",
+      "schema": "session.schema.json",
+      "valid": true,
+      "instance": {
+        "pv": 1,
+        "t": "hello",
+        "device": { "id": "0011223344556677", "name": "Pixel 7", "os": "Android 14" },
+        "caps": ["screen_view", "input_control"]
+      }
+    },
+    {
+      "name": "session_hello_ack",
+      "schema": "session.schema.json",
+      "valid": true,
+      "instance": {
+        "pv": 1,
+        "t": "hello_ack",
+        "device": { "id": "8899aabbccddeeff", "name": "Desk PC", "model": "", "os": "Windows 11" },
+        "caps": ["screen_view"],
+        "paired": true
+      }
+    },
+    {
+      "name": "session_ack_not_paired",
+      "schema": "session.schema.json",
+      "valid": true,
+      "instance": {
+        "pv": 1,
+        "t": "hello_ack",
+        "device": { "id": "8899aabbccddeeff", "name": "Desk PC", "os": "Windows 11" },
+        "caps": [],
+        "paired": false
+      }
+    },
+    {
+      "name": "qr_payload",
+      "schema": "qr.schema.json",
+      "valid": true,
+      "instance": {
+        "v": 1,
+        "n": "AAAAAAAAAAAAAAAAAAAAAA",
+        "p": 47321,
+        "h": "192.168.1.10",
+        "exp": 1700000120,
+        "name": "Desk PC"
+      }
+    },
+    {
+      "name": "heartbeat_ping",
+      "schema": "status.schema.json",
+      "valid": true,
+      "instance": { "t": "ping", "ts": 1700000000123 }
+    },
+    {
+      "name": "heartbeat_pong",
+      "schema": "status.schema.json",
+      "valid": true,
+      "instance": { "t": "pong", "ts": 1700000000123 }
+    },
+    {
+      "name": "status_changed_event",
+      "schema": "status.schema.json",
+      "valid": true,
+      "instance": {
+        "evt": "status.changed",
+        "data": {
+          "battery": { "pct": 80, "charging": false },
+          "screenOn": true,
+          "transport": "wifi",
+          "uptimeMs": 3600000,
+          "network": { "type": "wifi" },
+          "storage": { "freeBytes": 12000000000 }
+        }
+      }
+    },
+    {
+      "name": "status_changed_envelope",
+      "schema": "envelope.schema.json",
+      "valid": true,
+      "instance": {
+        "evt": "status.changed",
+        "data": { "battery": { "pct": 80, "charging": false }, "screenOn": true, "transport": "wifi" }
+      }
+    },
+
+    {
+      "name": "request_id_zero",
+      "schema": "envelope.schema.json",
+      "valid": false,
+      "reason": "request id must be >= 1",
+      "instance": { "id": 0, "cmd": "input.tap", "args": { "x": 1, "y": 2 } }
+    },
+    {
+      "name": "request_missing_id",
+      "schema": "envelope.schema.json",
+      "valid": false,
+      "reason": "request must carry an id",
+      "instance": { "cmd": "input.tap", "args": { "x": 1, "y": 2 } }
+    },
+    {
+      "name": "request_unknown_field",
+      "schema": "envelope.schema.json",
+      "valid": false,
+      "reason": "envelope forbids unknown fields",
+      "instance": { "id": 1, "cmd": "input.tap", "args": { "x": 1, "y": 2 }, "extra": true }
+    },
+    {
+      "name": "request_bad_cmd_shape",
+      "schema": "envelope.schema.json",
+      "valid": false,
+      "reason": "cmd must be lowercase ns.name",
+      "instance": { "id": 1, "cmd": "Input.Tap", "args": {} }
+    },
+    {
+      "name": "response_unknown_error_code",
+      "schema": "envelope.schema.json",
+      "valid": false,
+      "reason": "error codes are a closed enum",
+      "instance": { "id": 1, "ok": false, "error": { "code": "NOT_A_CODE", "message": "x" } }
+    },
+    {
+      "name": "response_mixed_ok_error",
+      "schema": "envelope.schema.json",
+      "valid": false,
+      "reason": "a response is either ok or error, never both",
+      "instance": { "id": 1, "ok": true, "error": { "code": "INTERNAL", "message": "x" } }
+    },
+    {
+      "name": "event_missing_data",
+      "schema": "envelope.schema.json",
+      "valid": false,
+      "reason": "events must carry data",
+      "instance": { "evt": "status.changed" }
+    },
+    {
+      "name": "control_tap_bad_type",
+      "schema": "control.schema.json",
+      "valid": false,
+      "reason": "coordinates must be integers",
+      "instance": { "id": 2, "cmd": "input.tap", "args": { "x": "1", "y": 2 } }
+    },
+    {
+      "name": "control_unknown_key",
+      "schema": "control.schema.json",
+      "valid": false,
+      "reason": "key codes are a closed enum",
+      "instance": { "id": 3, "cmd": "input.key", "args": { "key": "definitely_not_a_key" } }
+    },
+    {
+      "name": "control_fps_too_high",
+      "schema": "control.schema.json",
+      "valid": false,
+      "reason": "fps is capped at 60",
+      "instance": { "id": 4, "cmd": "screen.start", "args": { "fps": 500 } }
+    },
+    {
+      "name": "control_swipe_bad_field",
+      "schema": "control.schema.json",
+      "valid": false,
+      "reason": "snake_case dur_ms is not a wire field; the field is durMs",
+      "instance": { "id": 5, "cmd": "input.swipe", "args": { "x1": 0, "y1": 0, "x2": 1, "y2": 1, "dur_ms": 100 } }
+    },
+    {
+      "name": "session_bad_protocol_version",
+      "schema": "session.schema.json",
+      "valid": false,
+      "reason": "protocol version is pinned to 1",
+      "instance": { "pv": 2, "t": "hello", "device": { "id": "0011223344556677", "name": "x", "os": "y" }, "caps": [] }
+    },
+    {
+      "name": "session_bad_device_id",
+      "schema": "session.schema.json",
+      "valid": false,
+      "reason": "device id is 16 lowercase hex chars",
+      "instance": { "pv": 1, "t": "hello", "device": { "id": "NOTHEX", "name": "x", "os": "y" }, "caps": [] }
+    },
+    {
+      "name": "session_unknown_capability",
+      "schema": "session.schema.json",
+      "valid": false,
+      "reason": "capabilities are a closed enum",
+      "instance": { "pv": 1, "t": "hello", "device": { "id": "0011223344556677", "name": "x", "os": "y" }, "caps": ["telepathy"] }
+    },
+    {
+      "name": "qr_short_nonce",
+      "schema": "qr.schema.json",
+      "valid": false,
+      "reason": "nonce is 16 bytes (22 base64url chars)",
+      "instance": { "v": 1, "n": "short", "p": 47321, "exp": 1700000120 }
+    },
+    {
+      "name": "qr_bad_port",
+      "schema": "qr.schema.json",
+      "valid": false,
+      "reason": "port must be 1-65535",
+      "instance": { "v": 1, "n": "AAAAAAAAAAAAAAAAAAAAAA", "p": 0, "exp": 1700000120 }
+    },
+    {
+      "name": "status_missing_transport",
+      "schema": "status.schema.json",
+      "valid": false,
+      "reason": "status requires battery, screenOn and transport",
+      "instance": { "evt": "status.changed", "data": { "battery": { "pct": 10, "charging": false }, "screenOn": true } }
+    },
+    {
+      "name": "notifications_snake_case_posttime",
+      "schema": "notifications.schema.json",
+      "valid": false,
+      "reason": "the wire field is postTime, not post_time",
+      "instance": {
+        "evt": "notification.posted",
+        "data": { "key": "k", "app": "com.example", "title": "t", "post_time": 1 }
+      }
+    },
+    {
+      "name": "notifications_missing_posttime",
+      "schema": "notifications.schema.json",
+      "valid": false,
+      "reason": "postTime is required",
+      "instance": {
+        "evt": "notification.posted",
+        "data": { "key": "k", "app": "com.example", "title": "t" }
+      }
+    },
+    {
+      "name": "files_bad_sha256",
+      "schema": "files.schema.json",
+      "valid": false,
+      "reason": "sha256 is 64 lowercase hex chars",
+      "instance": { "id": 1, "cmd": "files.push", "args": { "path": "a.txt", "size": 1, "sha256": "ABC" } }
+    },
+    {
+      "name": "calls_bad_type",
+      "schema": "calls.schema.json",
+      "valid": false,
+      "reason": "call type is a closed enum",
+      "instance": {
+        "evt": "call.incoming",
+        "data": { "id": "1", "number": "+10000000000", "type": "teleport", "time": 1 }
+      }
+    },
+    {
+      "name": "clipboard_changed_with_data",
+      "schema": "clipboard.schema.json",
+      "valid": false,
+      "reason": "clipboard.changed never carries clipboard text (pull-only model)",
+      "instance": { "evt": "clipboard.changed", "data": { "text": "secret" } }
+    },
+    {
+      "name": "messages_sms_missing_sent",
+      "schema": "messages.schema.json",
+      "valid": false,
+      "reason": "sms 'sent' flag is required",
+      "instance": {
+        "evt": "sms.received",
+        "data": { "id": 1, "address": "+10000000000", "body": "hi", "time": 1 }
+      }
+    }
+  ]
+}

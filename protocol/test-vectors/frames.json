@@ -1,0 +1,124 @@
+{
+  "invalid": [
+    {
+      "error": "BodyTooSmall",
+      "hex": "000000000101000000000000",
+      "name": "zero_length"
+    },
+    {
+      "error": "BodyTooSmall",
+      "hex": "00000007010100000000000000",
+      "name": "seven_bytes"
+    },
+    {
+      "error": "BodyTooLarge",
+      "hex": "ffffffff0101000000000000",
+      "name": "too_large"
+    }
+  ],
+  "valid": [
+    {
+      "expect": {
+        "channel": 9,
+        "flags": 1,
+        "mtype": 1,
+        "payloadJson": {
+          "t": "ping",
+          "ts": 1700000000123
+        },
+        "seq": 0
+      },
+      "hex": "0000002709010001000000007b2274223a2270696e67222c227473223a313730303030303030303132337d",
+      "name": "heartbeat_ping"
+    },
+    {
+      "expect": {
+        "channel": 9,
+        "flags": 1,
+        "mtype": 2,
+        "payloadJson": {
+          "t": "pong",
+          "ts": 1700000000123
+        },
+        "seq": 1
+      },
+      "hex": "0000002709020001000000017b2274223a22706f6e67222c227473223a313730303030303030303132337d",
+      "name": "heartbeat_pong"
+    },
+    {
+      "expect": {
+        "channel": 1,
+        "flags": 1,
+        "mtype": 1,
+        "payloadJson": {
+          "args": {
+            "x": 100,
+            "y": 200
+          },
+          "cmd": "input.tap",
+          "id": 42
+        },
+        "seq": 42
+      },
+      "hex": "0000003c010100010000002a7b226964223a34322c22636d64223a22696e7075742e746170222c2261726773223a7b2278223a3130302c2279223a3230307d7d",
+      "name": "control_input_tap"
+    },
+    {
+      "expect": {
+        "channel": 1,
+        "flags": 1,
+        "mtype": 1,
+        "payloadJson": {
+          "caps": [
+            "screen_view",
+            "input_control"
+          ],
+          "device": {
+            "id": "0011223344556677",
+            "model": "Pixel 8",
+            "name": "Pixel 8",
+            "os": "Android 16"
+          },
+          "pv": 1,
+          "t": "hello"
+        },
+        "seq": 0
+      },
+      "hex": "0000009b01010001000000007b227076223a312c2274223a2268656c6c6f222c22646576696365223a7b226964223a2230303131323233333434353536363737222c226e616d65223a22506978656c2038222c226d6f64656c223a22506978656c2038222c226f73223a22416e64726f6964203136227d2c2263617073223a5b2273637265656e5f76696577222c22696e7075745f636f6e74726f6c225d7d",
+      "name": "session_hello"
+    },
+    {
+      "expect": {
+        "channel": 2,
+        "flags": 0,
+        "mtype": 2,
+        "payloadHex": "0000018bcfe56be70000000165888400",
+        "seq": 7
+      },
+      "hex": "0000001802020000000000070000018bcfe56be70000000165888400",
+      "name": "video_access_unit"
+    },
+    {
+      "expect": {
+        "channel": 7,
+        "flags": 0,
+        "mtype": 16,
+        "payloadHex": "00000009004189374bc6a7ef444154415f4348554e4b",
+        "seq": 3
+      },
+      "hex": "0000001e071000000000000300000009004189374bc6a7ef444154415f4348554e4b",
+      "name": "file_data_chunk"
+    },
+    {
+      "expect": {
+        "channel": 8,
+        "flags": 0,
+        "mtype": 3,
+        "payloadHex": "",
+        "seq": 0
+      },
+      "hex": "000000080803000000000000",
+      "name": "empty_payload"
+    }
+  ]
+}

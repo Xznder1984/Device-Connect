@@ -1,0 +1,342 @@
+{
+  "events": [
+    {
+      "data": {
+        "actions": [
+          {
+            "id": "reply",
+            "replyable": true,
+            "title": "Reply"
+          },
+          {
+            "id": "dismiss",
+            "title": "Dismiss"
+          }
+        ],
+        "app": "com.example.chat",
+        "appLabel": "Chat",
+        "key": "0|com.example.chat|42|tag|10007",
+        "postTime": 1700000000000,
+        "text": "On my way",
+        "title": "Alex"
+      },
+      "evt": "notification.posted"
+    },
+    {
+      "data": {
+        "address": "+15550100",
+        "body": "Sample SMS body",
+        "id": 91,
+        "name": "Test Contact",
+        "read": false,
+        "sent": false,
+        "time": 1700000000000
+      },
+      "evt": "sms.received"
+    },
+    {
+      "data": {
+        "id": "1",
+        "number": "+15550123",
+        "time": 1700000000000,
+        "type": "incoming"
+      },
+      "evt": "call.incoming"
+    },
+    {
+      "data": {
+        "battery": {
+          "charging": true,
+          "pct": 80
+        },
+        "network": {
+          "type": "wifi"
+        },
+        "screenOn": true,
+        "storage": {
+          "freeBytes": 12000000000
+        },
+        "transport": "wifi",
+        "uptimeMs": 3600000
+      },
+      "evt": "status.changed"
+    },
+    {
+      "data": {
+        "bytes": 65536,
+        "total": 1048576,
+        "transferId": 1
+      },
+      "evt": "file.progress"
+    }
+  ],
+  "requests": [
+    {
+      "args": {
+        "bitrate": 4000000,
+        "fps": 30,
+        "height": 1280,
+        "width": 720
+      },
+      "cmd": "screen.start",
+      "id": 1
+    },
+    {
+      "args": {},
+      "cmd": "screen.stop",
+      "id": 2
+    },
+    {
+      "args": {
+        "x": 540,
+        "y": 1200
+      },
+      "cmd": "input.tap",
+      "id": 3
+    },
+    {
+      "args": {
+        "x": 100,
+        "y": 100
+      },
+      "cmd": "input.longpress",
+      "id": 4
+    },
+    {
+      "args": {
+        "durMs": 200,
+        "x1": 500,
+        "x2": 500,
+        "y1": 1500,
+        "y2": 300
+      },
+      "cmd": "input.swipe",
+      "id": 5
+    },
+    {
+      "args": {
+        "dx": 0,
+        "dy": -200,
+        "x": 300,
+        "y": 900
+      },
+      "cmd": "input.scroll",
+      "id": 6
+    },
+    {
+      "args": {
+        "text": "Hello, phone!"
+      },
+      "cmd": "input.text",
+      "id": 7
+    },
+    {
+      "args": {
+        "key": "home"
+      },
+      "cmd": "input.key",
+      "id": 8
+    },
+    {
+      "args": {
+        "package": "com.android.settings"
+      },
+      "cmd": "app.open",
+      "id": 9
+    },
+    {
+      "args": {},
+      "cmd": "app.list",
+      "id": 10
+    },
+    {
+      "args": {},
+      "cmd": "screentext.get",
+      "id": 11
+    },
+    {
+      "args": {
+        "timeoutMs": 10000
+      },
+      "cmd": "wait.screen",
+      "id": 12
+    },
+    {
+      "args": {},
+      "cmd": "security.unpair",
+      "id": 13
+    },
+    {
+      "args": {
+        "caps": {
+          "clipboard": false,
+          "screen_view": true
+        }
+      },
+      "cmd": "caps.set",
+      "id": 14
+    },
+    {
+      "args": {
+        "bitrate": 1000000,
+        "fps": 15
+      },
+      "cmd": "screen.configure",
+      "id": 15
+    },
+    {
+      "args": {},
+      "cmd": "security.rotate",
+      "id": 16
+    },
+    {
+      "args": {
+        "limit": 50
+      },
+      "cmd": "notifications.list",
+      "id": 17
+    },
+    {
+      "args": {
+        "actionId": "reply",
+        "key": "0|com.example.chat|42|tag|10007",
+        "text": "On my way too"
+      },
+      "cmd": "notifications.reply",
+      "id": 18
+    },
+    {
+      "args": {
+        "key": "0|com.example.chat|42|tag|10007"
+      },
+      "cmd": "notifications.dismiss",
+      "id": 19
+    },
+    {
+      "args": {
+        "beforeId": 91,
+        "limit": 20
+      },
+      "cmd": "sms.list",
+      "id": 20
+    },
+    {
+      "args": {
+        "address": "+15550100",
+        "limit": 50
+      },
+      "cmd": "sms.thread",
+      "id": 21
+    },
+    {
+      "args": {
+        "text": "Hello from the PC",
+        "to": "+15550100"
+      },
+      "cmd": "sms.send",
+      "id": 22
+    },
+    {
+      "args": {
+        "limit": 20
+      },
+      "cmd": "calls.list",
+      "id": 23
+    },
+    {
+      "args": {
+        "id": "1"
+      },
+      "cmd": "calls.answer",
+      "id": 24
+    },
+    {
+      "args": {
+        "id": "1"
+      },
+      "cmd": "calls.reject",
+      "id": 25
+    },
+    {
+      "args": {
+        "number": "+15550123"
+      },
+      "cmd": "calls.dial",
+      "id": 26
+    },
+    {
+      "args": {},
+      "cmd": "clipboard.get",
+      "id": 27
+    },
+    {
+      "args": {
+        "text": "copied from PC"
+      },
+      "cmd": "clipboard.set",
+      "id": 28
+    },
+    {
+      "args": {
+        "path": "Download/report.pdf",
+        "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+        "size": 20480
+      },
+      "cmd": "files.push",
+      "id": 29
+    },
+    {
+      "args": {
+        "path": "DCIM/photo.jpg"
+      },
+      "cmd": "files.pull",
+      "id": 30
+    },
+    {
+      "args": {
+        "transferId": 1
+      },
+      "cmd": "files.cancel",
+      "id": 31
+    },
+    {
+      "args": {},
+      "cmd": "status.get",
+      "id": 32
+    }
+  ],
+  "responses": [
+    {
+      "id": 1,
+      "ok": true,
+      "result": {
+        "bitrate": 4000000,
+        "fps": 30,
+        "height": 1280,
+        "width": 720
+      }
+    },
+    {
+      "id": 2,
+      "ok": true,
+      "result": {}
+    },
+    {
+      "error": {
+        "code": "CAPABILITY_DISABLED",
+        "message": "input_control is off on the phone"
+      },
+      "id": 3,
+      "ok": false
+    },
+    {
+      "error": {
+        "actionId": "act-17",
+        "code": "CONFIRM_REQUIRED",
+        "message": "Confirm sending this SMS on the phone"
+      },
+      "id": 4,
+      "ok": false
+    }
+  ]
+}

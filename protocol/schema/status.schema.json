@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://device-connect.local/schema/status.schema.json",
+  "title": "Status channel (0x08) and heartbeat channel (0x09)",
+  "$defs": {
+    "status": {
+      "type": "object",
+      "required": ["battery", "screenOn", "transport"],
+      "additionalProperties": false,
+      "properties": {
+        "battery": {
+          "type": "object",
+          "required": ["pct", "charging"],
+          "additionalProperties": false,
+          "properties": {
+            "pct": { "type": "integer", "minimum": 0, "maximum": 100 },
+            "charging": { "type": "boolean" }
+          }
+        },
+        "screenOn": { "type": "boolean" },
+        "transport": { "type": "string", "enum": ["wifi", "bluetooth", "vpn"] },
+        "uptimeMs": { "type": "integer", "minimum": 0 },
+        "network": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": { "type": { "type": "string", "enum": ["wifi", "ethernet", "cellular", "none", "bluetooth"] } }
+        },
+        "storage": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": { "freeBytes": { "type": "integer", "minimum": 0 } }
+        }
+      }
+    },
+    "ping": {
+      "type": "object",
+      "required": ["t", "ts"],
+      "additionalProperties": false,
+      "properties": { "t": { "const": "ping" }, "ts": { "type": "integer", "minimum": 0 } }
+    },
+    "pong": {
+      "type": "object",
+      "required": ["t", "ts"],
+      "additionalProperties": false,
+      "properties": { "t": { "const": "pong" }, "ts": { "type": "integer", "minimum": 0 } }
+    }
+  },
+  "oneOf": [
+    { "required": ["cmd"], "properties": { "cmd": { "const": "status.get" }, "args": { "type": "object", "additionalProperties": false } } },
+    { "required": ["evt"], "properties": { "evt": { "const": "status.changed" }, "data": { "$ref": "#/$defs/status" } } },
+    { "required": ["t"], "properties": { "t": { "const": "ping" } } },
+    { "required": ["t"], "properties": { "t": { "const": "pong" } } }
+  ]
+}

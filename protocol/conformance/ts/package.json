@@ -1,0 +1,14 @@
+{
+  "name": "dc-conformance-ts",
+  "private": true,
+  "version": "0.1.0",
+  "license": "MIT",
+  "description": "Device Connect protocol conformance tests (framing, QR, confirmation codes, JSON Schema)",
+  "type": "module",
+  "scripts": {
+    "test": "node --test \"test/*.test.ts\""
+  },
+  "devDependencies": {
+    "ajv": "^8.17.1"
+  }
+}

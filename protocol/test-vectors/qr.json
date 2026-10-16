@@ -1,0 +1,39 @@
+{
+  "invalid": [
+    {
+      "error": "BadPrefix",
+      "name": "wrong_prefix",
+      "text": "https://example.com"
+    },
+    {
+      "error": "BadBase64",
+      "name": "bad_base64",
+      "text": "dc1:!!!not-base64!!!"
+    },
+    {
+      "error": "BadField",
+      "name": "bad_json",
+      "text": "dc1:eyJ2IjoyLCJuIjoiQUFBQUFBQUFBQUFBQUFBQUFBQUFBQSIsInAiOjEsImV4cCI6OX0"
+    },
+    {
+      "error": "Expired",
+      "name": "expired",
+      "text": "dc1:eyJ2IjoxLCJuIjoiSkNRa0pDUWtKQ1FrSkNRa0pDUWtKQSIsInAiOjQ3MzIxLCJoIjoiZGVzay1wYy5sb2NhbCIsImV4cCI6MTYwMDAwMDAwMCwibmFtZSI6IkRlc2sgUEMifQ"
+    }
+  ],
+  "valid": [
+    {
+      "encoded": "dc1:eyJ2IjoxLCJuIjoiSkNRa0pDUWtKQ1FrSkNRa0pDUWtKQSIsInAiOjQ3MzIxLCJoIjoiZGVzay1wYy5sb2NhbCIsImV4cCI6MTcwMDAwMDEyMCwibmFtZSI6IkRlc2sgUEMifQ",
+      "expiredAt": 1700000121,
+      "json": {
+        "exp": 1700000120,
+        "h": "desk-pc.local",
+        "n": "JCQkJCQkJCQkJCQkJCQkJA",
+        "name": "Desk PC",
+        "p": 47321,
+        "v": 1
+      },
+      "nonceHex": "24242424242424242424242424242424"
+    }
+  ]
+}
