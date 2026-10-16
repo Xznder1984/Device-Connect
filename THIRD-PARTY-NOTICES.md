@@ -49,9 +49,17 @@ license.
 | Component | Version | License |
 | --- | --- | --- |
 | Kotlin standard library and Gradle plugin | 2.4.x | Apache-2.0 |
+| Android Gradle plugin | 9.4.1 | Apache-2.0 |
 | `com.google.code.gson:gson` | 2.14.0 | Apache-2.0 |
+| `androidx.compose:compose-bom` (ui, foundation, material3, animation, runtime) | 2026.09.00 | Apache-2.0 |
+| `androidx.activity:activity-compose` | 1.13.0 | Apache-2.0 |
+| `androidx.core:core-ktx` | 1.19.1 | Apache-2.0 |
+| `androidx.lifecycle:lifecycle-runtime-ktx`, `lifecycle-service` | 2.11.0 | Apache-2.0 |
 | `org.junit:junit-bom` / JUnit Jupiter (test only) | 6.x | EPL-2.0 |
 | `com.southernstorm.noise` (vendored, see above) | MIT | MIT |
+
+All of the `androidx.*` and `androidx.compose.*` libraries are released under the
+Apache License 2.0 by The Android Open Source Project.
 
 ## Windows app — `windows-app` (added in a later phase)
 

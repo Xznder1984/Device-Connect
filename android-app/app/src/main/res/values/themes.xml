@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--
+      The window theme only provides the surface behind the Compose UI. All of
+      the real theming (color scheme, typography, dark mode) lives in Compose,
+      which reads the system setting with isSystemInDarkTheme().
+    -->
+    <style name="Theme.DeviceConnect" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">@color/window_background</item>
+    </style>
+</resources>
