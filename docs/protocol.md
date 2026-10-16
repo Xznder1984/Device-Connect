@@ -44,6 +44,27 @@ handshake (1 round trip). Re-keying is not used; a ChaChaPoly counter space of
 2^64 messages cannot be exhausted in a session's lifetime, and sessions end on
 disconnect.
 
+#### 2.2.1 Record layer
+
+Every message on the stream, including the handshake itself, is length-prefixed
+so a peer always knows where a message ends. All lengths are `u32be` and cover
+only the bytes that follow them.
+
+- **Handshake messages** (the three Noise XX messages): `u32be len` + message.
+  `len` MUST be <= 65536. The XX pattern stays well under 1 KiB, so anything
+  near the cap is a malformed or hostile peer and the connection is closed.
+- **Transport records** (everything after `split()`): `u32be len` +
+  ciphertext, where `len` is the encrypted size of exactly one frame, that is
+  the plaintext frame length plus the 16-byte Poly1305 tag. A plaintext frame is
+  `4 + body_len` bytes, so `len` MUST be <= 4 + 1_048_576 + 16 = 1_048_596.
+
+A zero-length record is invalid on both paths and closes the connection.
+
+The length prefix sits *outside* the AEAD, so tampering with it makes the tag
+check fail and the connection closes; it can never desynchronize a peer into
+accepting different plaintext. There is no padding and no coalescing in v1:
+one frame is one record.
+
 Immediately after the handshake, the **initiator** sends on the control
 channel (plaintext framing, encrypted by Noise):
 
@@ -65,6 +86,10 @@ pairing confirmation flow (section 3) before any channel traffic is used.
 ### 2.3 Frame format (all channels)
 
 All integers big-endian.
+
+> After the handshake this structure is the Noise *plaintext*. On the wire it is
+> wrapped by the record layer of section 2.2.1 (`u32be len` + ciphertext), so the
+> `body_len` field below is not readable until the record has been decrypted.
 
 ```
 offset  size  field

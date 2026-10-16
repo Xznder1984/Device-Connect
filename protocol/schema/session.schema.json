@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://device-connect.local/schema/session.schema.json",
   "title": "Session negotiation (control channel, first messages after Noise handshake)",
-  "description": "Sent by the initiator as mtype 0x01 with cmd field 't'. These two messages use the flat shape below rather than the generic envelope; they MUST be the first messages on the control channel.",
+  "description": "Sent by the initiator as mtype 0x01, and answered as mtype 0x02. These two messages are the one exception to envelope.schema.json: they use the flat shape below, discriminated by the field 't' rather than by 'cmd'/'ok'/'evt', and they MUST be the first messages on the control channel. Everything after hello_ack uses the generic envelope.",
   "oneOf": [
     {
       "type": "object",

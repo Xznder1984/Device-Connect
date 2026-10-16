@@ -39,6 +39,18 @@
             </intent-filter>
         </activity>
 
+        <!--
+          Hosts an active session. The connectedDevice type is what Android
+          requires for a service that keeps a device-to-device link up, and it
+          is also the honest description: this service exists only to hold the
+          connection your PC asked for. The notification it posts is the
+          consent surface and cannot be dismissed without disconnecting.
+        -->
+        <service
+            android:name=".service.ConnectionService"
+            android:exported="false"
+            android:foregroundServiceType="connectedDevice" />
+
     </application>
 
 </manifest>

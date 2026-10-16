@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://device-connect.local/schema/envelope.schema.json",
   "title": "Device Connect message envelope (JSON channels)",
-  "description": "All JSON payloads on control, notifications, messages, calls, clipboard, files, status and heartbeat channels. Carried in frames with flags bit0 (JSON_PAYLOAD) set. mtype 0x01/0x02/0x03/0x04 select request/response/event/error.",
+  "description": "All JSON payloads on control, notifications, messages, calls, clipboard, files, status and heartbeat channels, EXCEPT the session hello/hello_ack pair which session.schema.json defines separately. Carried in frames with flags bit0 (JSON_PAYLOAD) set. mtype 0x01/0x02/0x03/0x04 select request/response/event/error.",
   "oneOf": [
     { "$ref": "#/$defs/request" },
     { "$ref": "#/$defs/response_ok" },

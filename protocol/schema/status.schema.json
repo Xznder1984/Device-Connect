@@ -18,7 +18,7 @@
           }
         },
         "screenOn": { "type": "boolean" },
-        "transport": { "type": "string", "enum": ["wifi", "bluetooth", "vpn"] },
+        "transport": { "type": "string", "enum": ["wifi", "bluetooth", "vpn", "cellular"] },
         "uptimeMs": { "type": "integer", "minimum": 0 },
         "network": {
           "type": "object",

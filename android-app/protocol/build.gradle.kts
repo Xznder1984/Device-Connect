@@ -17,8 +17,11 @@ kotlin {
 }
 
 dependencies {
-    // JSON for the QR payload and (later) the control-plane envelopes.
-    implementation("com.google.code.gson:gson:2.14.0")
+    // JSON for the QR payload and the control-plane envelopes. Exposed with `api`
+    // rather than `implementation` because Gson types appear in this module's
+    // public surface (Wire.gson, Request.result, Response.result), so consumers
+    // such as the app need it on their own classpath to compile.
+    api("com.google.code.gson:gson:2.14.0")
 
     testImplementation(platform("org.junit:junit-bom:6.1.3"))
     testImplementation("org.junit.jupiter:junit-jupiter")

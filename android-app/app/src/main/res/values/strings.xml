@@ -1,4 +1,17 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Device Connect</string>
+
+    <!-- Notification channel -->
+    <string name="notif_channel_connection">Connection status</string>
+    <string name="notif_channel_connection_desc">Always shown while a session with your PC is active, so screen capture and remote control are never invisible.</string>
+
+    <!-- Notification body -->
+    <string name="notif_waiting_title">Device Connect</string>
+    <string name="notif_waiting_text">Waiting for your PC to connect</string>
+    <string name="notif_connected_title">Device Connect</string>
+    <string name="notif_connected_text">Connected to your PC</string>
+    <string name="notif_capture_title">Screen capture active</string>
+    <string name="notif_capture_text">Your PC can see this screen. Tap to open.</string>
+    <string name="action_disconnect">Disconnect</string>
 </resources>
