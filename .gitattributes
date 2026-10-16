@@ -1,0 +1,32 @@
+# Normalize line endings: store LF in the repository, check out per-platform.
+* text=auto eol=lf
+
+# Explicitly declare text files that must never get CRLF in the repo.
+*.ps1   text eol=lf
+*.psm1  text eol=lf
+*.cmd   text eol=crlf
+*.bat   text eol=crlf
+*.sh    text eol=lf
+
+# Binary files
+*.png   binary
+*.jpg   binary
+*.jpeg  binary
+*.webp  binary
+*.ico   binary
+*.icns  binary
+*.pdf   binary
+*.ttf   binary
+*.otf   binary
+*.woff2 binary
+*.jar   binary
+*.apk   binary
+*.keystore binary
+*.jks   binary
+*.h264  binary
+*.wav   binary
+*.mp4   binary
+
+# Gradle wrapper must keep its exact bytes.
+gradlew.bat text eol=crlf
+gradlew     text eol=lf

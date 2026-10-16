@@ -1,0 +1,48 @@
+# OS
+Thumbs.db
+Desktop.ini
+.DS_Store
+
+# Editors
+.vscode/
+.idea/
+*.iml
+*.swp
+
+# Node
+node_modules/
+dist/
+.npm/
+*.tsbuildinfo
+
+# Rust / Tauri
+target/
+windows-app/src-tauri/gen/
+
+# Kotlin / Gradle / Android
+android-app/.gradle/
+android-app/build/
+android-app/local.properties
+**/build/
+*.apk
+*.aab
+*.keystore
+*.jks
+
+# Signing material and secrets - never commit
+*.p12
+*.pfx
+*.pem
+.env
+.env.*
+*.token
+signing.properties
+keystore.properties
+
+# Caches
+.cache/
+*.log
+
+# Test artifacts
+coverage/
+test-results/
