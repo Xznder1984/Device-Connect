@@ -34,7 +34,10 @@ impl ErrorCode {
         }
     }
 
-    pub fn from_str(s: &str) -> Option<Self> {
+    /// The wire spelling of a code, e.g. `"BUSY"`. The inverse of [`as_str`].
+    ///
+    /// [`as_str`]: ErrorCode::as_str
+    pub fn from_wire(s: &str) -> Option<Self> {
         Some(match s {
             "UNAUTHORIZED" => ErrorCode::Unauthorized,
             "NOT_PAIRED" => ErrorCode::NotPaired,
@@ -70,6 +73,6 @@ impl<'de> serde::Deserialize<'de> for ErrorCode {
         let s = String::deserialize(deserializer)?;
         // Forward compatibility: unknown codes are treated as INTERNAL
         // (docs/protocol.md section 6).
-        Ok(ErrorCode::from_str(&s).unwrap_or(ErrorCode::Internal))
+        Ok(ErrorCode::from_wire(&s).unwrap_or(ErrorCode::Internal))
     }
 }

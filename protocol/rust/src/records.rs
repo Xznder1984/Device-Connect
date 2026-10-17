@@ -65,7 +65,10 @@ pub enum Role {
 /// One decoded record: its payload and how many buffer bytes it used.
 #[derive(Debug, PartialEq, Eq)]
 pub enum DecodeResult {
-    Decoded { payload: Vec<u8>, bytes_consumed: usize },
+    Decoded {
+        payload: Vec<u8>,
+        bytes_consumed: usize,
+    },
     NeedMore,
 }
 
@@ -80,7 +83,10 @@ pub fn encode(payload: &[u8], max: usize) -> Result<Vec<u8>, RecordError> {
         return Err(RecordError::BodyTooSmall { got: 0 });
     }
     if payload.len() > max {
-        return Err(RecordError::BodyTooLarge { got: payload.len() as u32, max });
+        return Err(RecordError::BodyTooLarge {
+            got: payload.len() as u32,
+            max,
+        });
     }
     let mut out = Vec::with_capacity(LENGTH_BYTES + payload.len());
     out.extend_from_slice(&(payload.len() as u32).to_be_bytes());
@@ -115,7 +121,11 @@ pub fn decode(buf: &[u8], max: usize) -> Result<DecodeResult, RecordError> {
 }
 
 /// Write one record and flush it.
-pub fn write_record<W: Write>(writer: &mut W, payload: &[u8], max: usize) -> Result<(), RecordError> {
+pub fn write_record<W: Write>(
+    writer: &mut W,
+    payload: &[u8],
+    max: usize,
+) -> Result<(), RecordError> {
     let encoded = encode(payload, max)?;
     writer.write_all(&encoded)?;
     writer.flush()?;
@@ -255,7 +265,10 @@ impl SecureTransport {
     }
 
     /// Read the next record, decrypt it and decode one frame.
-    pub fn read_frame<R: Read, W: Write>(&mut self, wire: &mut WireStream<R, W>) -> Result<Frame, RecordError> {
+    pub fn read_frame<R: Read, W: Write>(
+        &mut self,
+        wire: &mut WireStream<R, W>,
+    ) -> Result<Frame, RecordError> {
         let ciphertext = read_record(&mut wire.reader, MAX_TRANSPORT_RECORD)?;
         let plaintext = self.transport.decrypt(&ciphertext)?;
         match Frame::decode(&plaintext)? {
@@ -270,7 +283,12 @@ mod tests {
     use super::*;
     use std::io::Cursor;
 
-    fn golden_keys() -> ([u8; 32], [u8; 32], [u8; 32], [u8; 32], Vec<u8>) {
+    /// The fixed key material the golden tests hand to the handshake, in the
+    /// order the handshake takes it: initiator static, responder static,
+    /// initiator ephemeral, responder ephemeral, prologue.
+    type GoldenKeys = ([u8; 32], [u8; 32], [u8; 32], [u8; 32], Vec<u8>);
+
+    fn golden_keys() -> GoldenKeys {
         (
             [0x11u8; 32],
             [0x22u8; 32],
@@ -287,7 +305,10 @@ mod tests {
         // drifting apart at the boundary.
         assert_eq!(MAX_HANDSHAKE_RECORD, 65_536);
         assert_eq!(MAX_TRANSPORT_RECORD, 1_048_596);
-        assert_eq!(MAX_TRANSPORT_RECORD, LENGTH_BYTES + MAX_BODY_LEN as usize + POLY1305_TAG_LEN);
+        assert_eq!(
+            MAX_TRANSPORT_RECORD,
+            LENGTH_BYTES + MAX_BODY_LEN as usize + POLY1305_TAG_LEN
+        );
 
         // The largest legal record on each path is accepted ...
         let handshake = encode(&vec![0u8; MAX_HANDSHAKE_RECORD], MAX_HANDSHAKE_RECORD).unwrap();
@@ -318,7 +339,10 @@ mod tests {
         let encoded = encode(b"incomplete record", MAX_TRANSPORT_RECORD).unwrap();
         for cut in 0..encoded.len() {
             assert!(
-                matches!(decode(&encoded[..cut], MAX_TRANSPORT_RECORD).unwrap(), DecodeResult::NeedMore),
+                matches!(
+                    decode(&encoded[..cut], MAX_TRANSPORT_RECORD).unwrap(),
+                    DecodeResult::NeedMore
+                ),
                 "cut at {cut}"
             );
         }
@@ -334,7 +358,10 @@ mod tests {
             decode(&[0, 0, 0, 0], MAX_TRANSPORT_RECORD),
             Err(RecordError::BodyTooSmall { got: 0 })
         ));
-        assert!(matches!(encode(&[], MAX_TRANSPORT_RECORD), Err(RecordError::BodyTooSmall { got: 0 })));
+        assert!(matches!(
+            encode(&[], MAX_TRANSPORT_RECORD),
+            Err(RecordError::BodyTooSmall { got: 0 })
+        ));
     }
 
     #[test]
@@ -373,7 +400,12 @@ mod tests {
         // The same WireStream must still yield the greeting: if the handshake
         // had wrapped its own buffer, those bytes would already be gone.
         let mut secure = SecureTransport::new(transport);
-        assert_eq!(secure.read_frame(&mut wire).expect("greeting after handshake"), frame);
+        assert_eq!(
+            secure
+                .read_frame(&mut wire)
+                .expect("greeting after handshake"),
+            frame
+        );
     }
 
     #[test]

@@ -23,7 +23,11 @@ pub struct Request {
 
 impl Request {
     pub fn new(id: u32, cmd: &str, args: Value) -> Self {
-        Self { id, cmd: cmd.to_string(), args }
+        Self {
+            id,
+            cmd: cmd.to_string(),
+            args,
+        }
     }
 
     pub fn from_frame(frame: &Frame) -> Result<Self, serde_json::Error> {
@@ -41,11 +45,23 @@ pub struct ErrorBody {
 
 impl ErrorBody {
     pub fn new(code: ErrorCode, message: impl Into<String>) -> Self {
-        Self { code, message: message.into(), action_id: None }
+        Self {
+            code,
+            message: message.into(),
+            action_id: None,
+        }
     }
 
-    pub fn with_action(code: ErrorCode, message: impl Into<String>, action_id: impl Into<String>) -> Self {
-        Self { code, message: message.into(), action_id: Some(action_id.into()) }
+    pub fn with_action(
+        code: ErrorCode,
+        message: impl Into<String>,
+        action_id: impl Into<String>,
+    ) -> Self {
+        Self {
+            code,
+            message: message.into(),
+            action_id: Some(action_id.into()),
+        }
     }
 }
 
@@ -61,11 +77,21 @@ pub struct Response {
 
 impl Response {
     pub fn ok(id: u32, result: Value) -> Self {
-        Self { id, ok: true, result: Some(result), error: None }
+        Self {
+            id,
+            ok: true,
+            result: Some(result),
+            error: None,
+        }
     }
 
     pub fn err(id: u32, error: ErrorBody) -> Self {
-        Self { id, ok: false, result: None, error: Some(error) }
+        Self {
+            id,
+            ok: false,
+            result: None,
+            error: Some(error),
+        }
     }
 
     pub fn from_frame(frame: &Frame) -> Result<Self, serde_json::Error> {
@@ -81,7 +107,10 @@ pub struct Event {
 
 impl Event {
     pub fn new(evt: &str, data: Value) -> Self {
-        Self { evt: evt.to_string(), data }
+        Self {
+            evt: evt.to_string(),
+            data,
+        }
     }
 
     pub fn from_frame(frame: &Frame) -> Result<Self, serde_json::Error> {
@@ -92,7 +121,13 @@ impl Event {
 /// Encode any serializable message as a JSON frame on `channel`.
 pub fn json_frame<T: Serialize>(channel: u8, mtype_byte: u8, seq: u32, msg: &T) -> Frame {
     let payload = serde_json::to_vec(msg).expect("message serializes");
-    Frame { channel, mtype: mtype_byte, flags: FLAG_JSON, seq, payload }
+    Frame {
+        channel,
+        mtype: mtype_byte,
+        flags: FLAG_JSON,
+        seq,
+        payload,
+    }
 }
 
 pub fn request_frame(channel: u8, seq: u32, req: &Request) -> Frame {
@@ -129,7 +164,12 @@ pub struct SessionHello {
 
 impl SessionHello {
     pub fn new(device: DeviceInfo, caps: Vec<String>) -> Self {
-        Self { pv: crate::PROTOCOL_VERSION, t: "hello".into(), device, caps }
+        Self {
+            pv: crate::PROTOCOL_VERSION,
+            t: "hello".into(),
+            device,
+            caps,
+        }
     }
 }
 
@@ -144,7 +184,13 @@ pub struct SessionHelloAck {
 
 impl SessionHelloAck {
     pub fn new(device: DeviceInfo, caps: Vec<String>, paired: bool) -> Self {
-        Self { pv: crate::PROTOCOL_VERSION, t: "hello_ack".into(), device, caps, paired }
+        Self {
+            pv: crate::PROTOCOL_VERSION,
+            t: "hello_ack".into(),
+            device,
+            caps,
+            paired,
+        }
     }
 }
 
@@ -155,26 +201,41 @@ impl SessionHelloAck {
 pub enum ControlCmd {
     #[serde(rename = "screen.start")]
     ScreenStart {
-        #[serde(default, skip_serializing_if = "Option::is_none")] width: Option<u32>,
-        #[serde(default, skip_serializing_if = "Option::is_none")] height: Option<u32>,
-        #[serde(default, skip_serializing_if = "Option::is_none")] fps: Option<u32>,
-        #[serde(default, skip_serializing_if = "Option::is_none")] bitrate: Option<u64>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        width: Option<u32>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        height: Option<u32>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        fps: Option<u32>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        bitrate: Option<u64>,
     },
     #[serde(rename = "screen.stop")]
     ScreenStop {},
     #[serde(rename = "screen.configure")]
     ScreenConfigure {
-        #[serde(default, skip_serializing_if = "Option::is_none")] width: Option<u32>,
-        #[serde(default, skip_serializing_if = "Option::is_none")] height: Option<u32>,
-        #[serde(default, skip_serializing_if = "Option::is_none")] fps: Option<u32>,
-        #[serde(default, skip_serializing_if = "Option::is_none")] bitrate: Option<u64>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        width: Option<u32>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        height: Option<u32>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        fps: Option<u32>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        bitrate: Option<u64>,
     },
     #[serde(rename = "input.tap")]
     InputTap { x: u32, y: u32 },
     #[serde(rename = "input.longpress")]
     InputLongPress { x: u32, y: u32 },
     #[serde(rename = "input.swipe")]
-    InputSwipe { x1: u32, y1: u32, x2: u32, y2: u32, #[serde(rename = "durMs", default, skip_serializing_if = "Option::is_none")] dur_ms: Option<u32> },
+    InputSwipe {
+        x1: u32,
+        y1: u32,
+        x2: u32,
+        y2: u32,
+        #[serde(rename = "durMs", default, skip_serializing_if = "Option::is_none")]
+        dur_ms: Option<u32>,
+    },
     #[serde(rename = "input.scroll")]
     InputScroll { x: u32, y: u32, dx: i32, dy: i32 },
     #[serde(rename = "input.text")]
@@ -188,13 +249,18 @@ pub enum ControlCmd {
     #[serde(rename = "screentext.get")]
     ScreenTextGet {},
     #[serde(rename = "wait.screen")]
-    WaitScreen { #[serde(rename = "timeoutMs")] timeout_ms: u32 },
+    WaitScreen {
+        #[serde(rename = "timeoutMs")]
+        timeout_ms: u32,
+    },
     #[serde(rename = "security.unpair")]
     SecurityUnpair {},
     #[serde(rename = "security.rotate")]
     SecurityRotate {},
     #[serde(rename = "caps.set")]
-    CapsSet { caps: std::collections::BTreeMap<String, bool> },
+    CapsSet {
+        caps: std::collections::BTreeMap<String, bool>,
+    },
 }
 
 impl ControlCmd {
@@ -222,7 +288,10 @@ impl ControlCmd {
     /// Convert to a wire request. `id` correlates the response.
     pub fn to_request(&self, id: u32) -> Request {
         let args = serde_json::to_value(self).expect("serializes");
-        let args = args.get("args").cloned().unwrap_or(Value::Object(Default::default()));
+        let args = args
+            .get("args")
+            .cloned()
+            .unwrap_or(Value::Object(Default::default()));
         Request::new(id, self.name(), args)
     }
 
@@ -402,19 +471,41 @@ mod tests {
     #[test]
     fn control_cmd_roundtrip() {
         let cmds = vec![
-            ControlCmd::ScreenStart { width: Some(720), height: Some(1280), fps: Some(30), bitrate: Some(4_000_000) },
+            ControlCmd::ScreenStart {
+                width: Some(720),
+                height: Some(1280),
+                fps: Some(30),
+                bitrate: Some(4_000_000),
+            },
             ControlCmd::ScreenStop {},
             ControlCmd::InputTap { x: 100, y: 200 },
-            ControlCmd::InputSwipe { x1: 0, y1: 500, x2: 0, y2: 100, dur_ms: Some(150) },
-            ControlCmd::InputScroll { x: 10, y: 20, dx: 0, dy: -120 },
-            ControlCmd::InputText { text: "hello".into() },
+            ControlCmd::InputSwipe {
+                x1: 0,
+                y1: 500,
+                x2: 0,
+                y2: 100,
+                dur_ms: Some(150),
+            },
+            ControlCmd::InputScroll {
+                x: 10,
+                y: 20,
+                dx: 0,
+                dy: -120,
+            },
+            ControlCmd::InputText {
+                text: "hello".into(),
+            },
             ControlCmd::InputKey { key: KeyCode::Back },
-            ControlCmd::AppOpen { package: "com.example.app".into() },
+            ControlCmd::AppOpen {
+                package: "com.example.app".into(),
+            },
             ControlCmd::AppList {},
             ControlCmd::ScreenTextGet {},
             ControlCmd::WaitScreen { timeout_ms: 5000 },
             ControlCmd::SecurityUnpair {},
-            ControlCmd::CapsSet { caps: [("screen_view".to_string(), true)].into_iter().collect() },
+            ControlCmd::CapsSet {
+                caps: [("screen_view".to_string(), true)].into_iter().collect(),
+            },
         ];
         for cmd in cmds {
             let req = cmd.to_request(7);
@@ -425,11 +516,17 @@ mod tests {
 
     #[test]
     fn response_shapes() {
-        let ok = Response::ok(3, serde_json::json!({"battery": {"pct": 80, "charging": false}}));
+        let ok = Response::ok(
+            3,
+            serde_json::json!({"battery": {"pct": 80, "charging": false}}),
+        );
         let v = serde_json::to_value(&ok).unwrap();
         assert_eq!(v["ok"], true);
         assert!(v.get("error").is_none());
-        let err = Response::err(4, ErrorBody::with_action(ErrorCode::ConfirmRequired, "confirm on phone", "a-1"));
+        let err = Response::err(
+            4,
+            ErrorBody::with_action(ErrorCode::ConfirmRequired, "confirm on phone", "a-1"),
+        );
         let v = serde_json::to_value(&err).unwrap();
         assert_eq!(v["error"]["actionId"], "a-1");
         assert_eq!(v["error"]["code"], "CONFIRM_REQUIRED");

@@ -14,7 +14,9 @@ use std::path::PathBuf;
 fn vectors_dir() -> PathBuf {
     let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let candidate = manifest.join("../test-vectors");
-    candidate.canonicalize().expect("protocol/test-vectors exists")
+    candidate
+        .canonicalize()
+        .expect("protocol/test-vectors exists")
 }
 
 fn load(name: &str) -> Value {
@@ -43,10 +45,26 @@ fn frames_valid() {
         let frame = Frame::decode(&bytes)
             .unwrap_or_else(|e| panic!("{name}: decode failed: {e}"))
             .unwrap_or_else(|| panic!("{name}: incomplete frame"));
-        assert_eq!(frame.channel, v["expect"]["channel"].as_u64().unwrap() as u8, "{name} channel");
-        assert_eq!(frame.mtype, v["expect"]["mtype"].as_u64().unwrap() as u8, "{name} mtype");
-        assert_eq!(frame.flags, v["expect"]["flags"].as_u64().unwrap() as u16, "{name} flags");
-        assert_eq!(frame.seq, v["expect"]["seq"].as_u64().unwrap() as u32, "{name} seq");
+        assert_eq!(
+            frame.channel,
+            v["expect"]["channel"].as_u64().unwrap() as u8,
+            "{name} channel"
+        );
+        assert_eq!(
+            frame.mtype,
+            v["expect"]["mtype"].as_u64().unwrap() as u8,
+            "{name} mtype"
+        );
+        assert_eq!(
+            frame.flags,
+            v["expect"]["flags"].as_u64().unwrap() as u16,
+            "{name} flags"
+        );
+        assert_eq!(
+            frame.seq,
+            v["expect"]["seq"].as_u64().unwrap() as u32,
+            "{name} seq"
+        );
         if let Some(payload_hex) = v["expect"].get("payloadHex").and_then(|x| x.as_str()) {
             assert_eq!(frame.payload, unhex(payload_hex), "{name} payload bytes");
         }
@@ -83,13 +101,20 @@ fn qr_vectors() {
         let payload = QrPayload::decode(v["encoded"].as_str().unwrap()).expect("valid QR decodes");
         let reencoded = serde_json::to_value(&payload).unwrap();
         assert_eq!(&reencoded, &v["json"], "QR json roundtrip");
-        assert_eq!(payload.encode(), v["encoded"].as_str().unwrap(), "QR encode stability");
+        assert_eq!(
+            payload.encode(),
+            v["encoded"].as_str().unwrap(),
+            "QR encode stability"
+        );
         assert_eq!(
             hex::encode(payload.nonce_bytes().expect("nonce decodes")),
             v["nonceHex"].as_str().unwrap(),
             "QR nonce"
         );
-        assert!(payload.is_expired(v["expiredAt"].as_u64().unwrap()), "QR expiry");
+        assert!(
+            payload.is_expired(v["expiredAt"].as_u64().unwrap()),
+            "QR expiry"
+        );
     }
     for v in vectors["invalid"].as_array().unwrap() {
         let name = v["name"].as_str().unwrap();
@@ -118,7 +143,11 @@ fn confirmation_codes() {
         let a = unhex(p["pkA"].as_str().unwrap());
         let b = unhex(p["pkB"].as_str().unwrap());
         assert_eq!(confirmation_code(&a, &b), p["code"].as_str().unwrap());
-        assert_eq!(confirmation_code(&b, &a), p["code"].as_str().unwrap(), "order independence");
+        assert_eq!(
+            confirmation_code(&b, &a),
+            p["code"].as_str().unwrap(),
+            "order independence"
+        );
     }
 }
 
@@ -147,13 +176,19 @@ fn noise_known_answer() {
     let mut rt = NoiseTransport::from_state(rt);
 
     let t0 = &kat["transports"][0];
-    let cipher = it.encrypt(t0["plain"].as_str().unwrap().as_bytes()).unwrap();
-    assert_eq!(hex::encode(&cipher), t0["cipherHex"], "initiator transport encryption");
+    let cipher = it
+        .encrypt(t0["plain"].as_str().unwrap().as_bytes())
+        .unwrap();
+    assert_eq!(
+        hex::encode(&cipher),
+        t0["cipherHex"],
+        "initiator transport encryption"
+    );
 
     // Cross-decrypt both directions.
     for entry in kat["transports"].as_array().unwrap() {
         let cipher = unhex(entry["cipherHex"].as_str().unwrap());
-        let (mut decryptor, plain) = if entry["from"] == "initiator" {
+        let (decryptor, plain) = if entry["from"] == "initiator" {
             (&mut rt, entry["plain"].as_str().unwrap())
         } else {
             (&mut it, entry["plain"].as_str().unwrap())
@@ -162,15 +197,17 @@ fn noise_known_answer() {
     }
 
     // A fresh transport wrapper still enforces nonce ordering.
-    let mut wrap = NoiseTransport::from_state(handshake_in_memory(
-        &arr("initiatorStaticPrivHex"),
-        &arr("responderStaticPrivHex"),
-        &arr("initiatorEphPrivHex"),
-        &arr("responderEphPrivHex"),
-        &unhex(kat["prologueHex"].as_str().unwrap()),
-    )
-    .unwrap()
-    .3);
+    let mut wrap = NoiseTransport::from_state(
+        handshake_in_memory(
+            &arr("initiatorStaticPrivHex"),
+            &arr("responderStaticPrivHex"),
+            &arr("initiatorEphPrivHex"),
+            &arr("responderEphPrivHex"),
+            &unhex(kat["prologueHex"].as_str().unwrap()),
+        )
+        .unwrap()
+        .3,
+    );
     let c1 = wrap.encrypt(b"a").unwrap();
     assert_ne!(c1, wrap.encrypt(b"a").unwrap());
 }
@@ -184,7 +221,8 @@ fn record_layer_carries_the_golden_transports() {
     // Rust implementations must agree on byte for byte; the Kotlin suite
     // asserts the mirror image of this test.
     let golden_cipher = unhex(kat["transports"][0]["cipherHex"].as_str().unwrap());
-    let record = records::encode(&golden_cipher, records::MAX_TRANSPORT_RECORD).expect("encode record");
+    let record =
+        records::encode(&golden_cipher, records::MAX_TRANSPORT_RECORD).expect("encode record");
 
     let mut manual = (golden_cipher.len() as u32).to_be_bytes().to_vec();
     manual.extend_from_slice(&golden_cipher);
@@ -213,9 +251,14 @@ fn record_layer_carries_the_golden_transports() {
 
     // The handshake messages travel through the same layer.
     let m1 = unhex(kat["msg1Hex"].as_str().unwrap());
-    let framed = records::encode(&m1, records::MAX_HANDSHAKE_RECORD).expect("encode handshake record");
-    match records::decode(&framed, records::MAX_HANDSHAKE_RECORD).expect("decode handshake record") {
-        DecodeResult::Decoded { payload, bytes_consumed } => {
+    let framed =
+        records::encode(&m1, records::MAX_HANDSHAKE_RECORD).expect("encode handshake record");
+    match records::decode(&framed, records::MAX_HANDSHAKE_RECORD).expect("decode handshake record")
+    {
+        DecodeResult::Decoded {
+            payload,
+            bytes_consumed,
+        } => {
             assert_eq!(payload, m1);
             assert_eq!(bytes_consumed, 4 + m1.len());
         }
@@ -229,12 +272,22 @@ fn typed_messages() {
     for v in vectors["requests"].as_array().unwrap() {
         let req: Request = serde_json::from_value(v.clone()).expect("request parses");
         // Roundtrip through the typed control commands where applicable.
-        if req.cmd.starts_with("input.") || req.cmd.starts_with("screen.") || req.cmd.starts_with("app.")
-            || req.cmd.starts_with("security.") || req.cmd == "screentext.get"
-            || req.cmd == "wait.screen" || req.cmd == "caps.set"
+        if req.cmd.starts_with("input.")
+            || req.cmd.starts_with("screen.")
+            || req.cmd.starts_with("app.")
+            || req.cmd.starts_with("security.")
+            || req.cmd == "screentext.get"
+            || req.cmd == "wait.screen"
+            || req.cmd == "caps.set"
         {
-            let typed = ControlCmd::from_request(&req).unwrap_or_else(|e| panic!("{}: {e}", req.cmd));
-            assert_eq!(&serde_json::to_value(typed.to_request(req.id)).unwrap(), v, "{}", req.cmd);
+            let typed =
+                ControlCmd::from_request(&req).unwrap_or_else(|e| panic!("{}: {e}", req.cmd));
+            assert_eq!(
+                &serde_json::to_value(typed.to_request(req.id)).unwrap(),
+                v,
+                "{}",
+                req.cmd
+            );
         }
     }
     for v in vectors["responses"].as_array().unwrap() {
@@ -250,7 +303,10 @@ fn typed_messages() {
 #[test]
 fn unknown_error_code_is_internal() {
     // Forward compatibility: unknown codes deserialize as INTERNAL.
-    let parsed: Response = serde_json::from_str(r#"{"id":1,"ok":false,"error":{"code":"SOMETHING_NEW","message":"x"}}"#).unwrap();
+    let parsed: Response = serde_json::from_str(
+        r#"{"id":1,"ok":false,"error":{"code":"SOMETHING_NEW","message":"x"}}"#,
+    )
+    .unwrap();
     assert_eq!(parsed.error.unwrap().code, ErrorCode::Internal);
 }
 

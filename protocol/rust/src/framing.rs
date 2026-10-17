@@ -95,11 +95,23 @@ pub struct Frame {
 
 impl Frame {
     pub fn new(channel: u8, mtype: u8, seq: u32, payload: Vec<u8>) -> Self {
-        Self { channel, mtype, flags: 0, seq, payload }
+        Self {
+            channel,
+            mtype,
+            flags: 0,
+            seq,
+            payload,
+        }
     }
 
     pub fn json(channel: u8, mtype: u8, seq: u32, payload: Vec<u8>) -> Self {
-        Self { channel, mtype, flags: FLAG_JSON, seq, payload }
+        Self {
+            channel,
+            mtype,
+            flags: FLAG_JSON,
+            seq,
+            payload,
+        }
     }
 
     pub fn is_json(&self) -> bool {
@@ -206,9 +218,15 @@ impl FileData {
         off.copy_from_slice(&payload[4..12]);
         let chunk = payload[12..].to_vec();
         if chunk.len() > MAX_FILE_CHUNK {
-            return Err(FrameError::BodyTooLarge { got: chunk.len() as u32 });
+            return Err(FrameError::BodyTooLarge {
+                got: chunk.len() as u32,
+            });
         }
-        Ok(Self { transfer_id, offset: u64::from_be_bytes(off), chunk })
+        Ok(Self {
+            transfer_id,
+            offset: u64::from_be_bytes(off),
+            chunk,
+        })
     }
 }
 
@@ -234,7 +252,10 @@ impl VideoAu {
         }
         let mut ts = [0u8; 8];
         ts.copy_from_slice(&payload[0..8]);
-        Ok(Self { timestamp_ms: u64::from_be_bytes(ts), data: payload[8..].to_vec() })
+        Ok(Self {
+            timestamp_ms: u64::from_be_bytes(ts),
+            data: payload[8..].to_vec(),
+        })
     }
 }
 
@@ -268,12 +289,18 @@ mod tests {
     #[test]
     fn rejects_bad_len() {
         let mut bytes = vec![0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0];
-        assert!(matches!(Frame::decode(&bytes), Err(FrameError::BodyTooSmall { got: 0 })));
+        assert!(matches!(
+            Frame::decode(&bytes),
+            Err(FrameError::BodyTooSmall { got: 0 })
+        ));
         bytes[0] = 0xFF;
         bytes[1] = 0xFF;
         bytes[2] = 0xFF;
         bytes[3] = 0xFF;
-        assert!(matches!(Frame::decode(&bytes), Err(FrameError::BodyTooLarge { .. })));
+        assert!(matches!(
+            Frame::decode(&bytes),
+            Err(FrameError::BodyTooLarge { .. })
+        ));
     }
 
     #[test]
@@ -295,14 +322,21 @@ mod tests {
 
     #[test]
     fn file_data_roundtrip() {
-        let fd = FileData { transfer_id: 42, offset: 123456789, chunk: vec![9u8; 1000] };
+        let fd = FileData {
+            transfer_id: 42,
+            offset: 123456789,
+            chunk: vec![9u8; 1000],
+        };
         let enc = fd.encode();
         assert_eq!(FileData::decode(&enc).unwrap(), fd);
     }
 
     #[test]
     fn video_au_roundtrip() {
-        let au = VideoAu { timestamp_ms: 1700000000123, data: vec![0, 0, 0, 1, 0x67] };
+        let au = VideoAu {
+            timestamp_ms: 1700000000123,
+            data: vec![0, 0, 0, 1, 0x67],
+        };
         let enc = au.encode();
         assert_eq!(VideoAu::decode(&enc).unwrap(), au);
     }

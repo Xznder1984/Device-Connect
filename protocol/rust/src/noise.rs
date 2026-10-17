@@ -38,8 +38,15 @@ pub(crate) fn builder<'a>(
     }
 }
 
+/// What [`handshake_in_memory`] hands back: `(msg1, msg2, msg3,
+/// initiator_transport, responder_transport)`.
+///
+/// A named type rather than an inline tuple because the order is not guessable
+/// from the types - two of the five are `Vec<u8>` - and the KAT file stores
+/// exactly this shape.
+pub type HandshakeTranscript = (Vec<u8>, Vec<u8>, Vec<u8>, TransportState, TransportState);
+
 /// Run the full 3-message XX handshake in memory with fixed keys.
-/// Returns (msg1, msg2, msg3, initiator_transport, responder_transport).
 /// Used to generate known-answer test vectors; the apps perform the same
 /// steps over their socket. Fixed ephemerals make the transcript
 /// deterministic, so this is ONLY for tests and vector generation.
@@ -49,9 +56,11 @@ pub fn handshake_in_memory(
     initiator_eph: &[u8; 32],
     responder_eph: &[u8; 32],
     prologue: &[u8],
-) -> Result<(Vec<u8>, Vec<u8>, Vec<u8>, TransportState, TransportState), snow::Error> {
-    let mut initiator = builder(prologue, initiator_static, Some(initiator_eph)).build_initiator()?;
-    let mut responder = builder(prologue, responder_static, Some(responder_eph)).build_responder()?;
+) -> Result<HandshakeTranscript, snow::Error> {
+    let mut initiator =
+        builder(prologue, initiator_static, Some(initiator_eph)).build_initiator()?;
+    let mut responder =
+        builder(prologue, responder_static, Some(responder_eph)).build_responder()?;
 
     let mut msg1 = vec![0u8; 128];
     let n1 = initiator.write_message(&[], &mut msg1)?;
@@ -70,7 +79,13 @@ pub fn handshake_in_memory(
 
     responder.read_message(&msg3, &mut scratch)?;
 
-    Ok((msg1, msg2, msg3, initiator.into_transport_mode()?, responder.into_transport_mode()?))
+    Ok((
+        msg1,
+        msg2,
+        msg3,
+        initiator.into_transport_mode()?,
+        responder.into_transport_mode()?,
+    ))
 }
 
 /// Thin wrapper around a Noise transport (snow `TransportState` in transport
@@ -129,8 +144,16 @@ mod tests {
         assert_eq!(responder_pub.len(), 32);
         assert_eq!(initiator_pub.len(), 32);
         assert_ne!(responder_pub, initiator_pub);
-        assert_ne!(responder_pub, &r_static[..], "public key differs from private key");
-        assert_ne!(initiator_pub, &i_static[..], "public key differs from private key");
+        assert_ne!(
+            responder_pub,
+            &r_static[..],
+            "public key differs from private key"
+        );
+        assert_ne!(
+            initiator_pub,
+            &i_static[..],
+            "public key differs from private key"
+        );
         let ct = it.encrypt(b"ping").unwrap();
         assert_eq!(rt.decrypt(&ct).unwrap(), b"ping");
         let ct2 = rt.encrypt(b"pong").unwrap();

@@ -40,7 +40,13 @@ pub struct QrPayload {
 
 impl QrPayload {
     /// Build a payload from raw nonce bytes.
-    pub fn new(nonce: &[u8; NONCE_LEN], port: u16, host: Option<String>, name: Option<String>, now_secs: u64) -> Self {
+    pub fn new(
+        nonce: &[u8; NONCE_LEN],
+        port: u16,
+        host: Option<String>,
+        name: Option<String>,
+        now_secs: u64,
+    ) -> Self {
         Self {
             v: 1,
             n: URL_SAFE_NO_PAD.encode(nonce),
@@ -53,7 +59,9 @@ impl QrPayload {
 
     /// The nonce as raw bytes (feeds the Noise prologue).
     pub fn nonce_bytes(&self) -> Result<[u8; NONCE_LEN], QrError> {
-        let raw = URL_SAFE_NO_PAD.decode(&self.n).map_err(|_| QrError::BadField("n"))?;
+        let raw = URL_SAFE_NO_PAD
+            .decode(&self.n)
+            .map_err(|_| QrError::BadField("n"))?;
         let mut out = [0u8; NONCE_LEN];
         if raw.len() != NONCE_LEN {
             return Err(QrError::BadField("n"));
@@ -71,8 +79,13 @@ impl QrPayload {
     /// Decode and structurally validate. Expiry is checked separately so
     /// callers can report "expired" distinctly from "malformed".
     pub fn decode(text: &str) -> Result<Self, QrError> {
-        let body = text.trim().strip_prefix(QR_PREFIX).ok_or(QrError::BadPrefix)?;
-        let json = URL_SAFE_NO_PAD.decode(body).map_err(|_| QrError::BadBase64)?;
+        let body = text
+            .trim()
+            .strip_prefix(QR_PREFIX)
+            .ok_or(QrError::BadPrefix)?;
+        let json = URL_SAFE_NO_PAD
+            .decode(body)
+            .map_err(|_| QrError::BadBase64)?;
         let payload: QrPayload = serde_json::from_slice(&json).map_err(|_| QrError::BadJson)?;
         if payload.v != 1 {
             return Err(QrError::BadField("v"));
@@ -80,7 +93,9 @@ impl QrPayload {
         if payload.p == 0 {
             return Err(QrError::BadField("p"));
         }
-        if payload.n.len() != 22 || URL_SAFE_NO_PAD.decode(&payload.n).map(|r| r.len()) != Ok(NONCE_LEN) {
+        if payload.n.len() != 22
+            || URL_SAFE_NO_PAD.decode(&payload.n).map(|r| r.len()) != Ok(NONCE_LEN)
+        {
             return Err(QrError::BadField("n"));
         }
         Ok(payload)
@@ -99,7 +114,13 @@ mod tests {
     #[test]
     fn roundtrip() {
         let nonce = [7u8; NONCE_LEN];
-        let p = QrPayload::new(&nonce, 47321, Some("pc.local".into()), Some("Desk PC".into()), 1_700_000_000);
+        let p = QrPayload::new(
+            &nonce,
+            47321,
+            Some("pc.local".into()),
+            Some("Desk PC".into()),
+            1_700_000_000,
+        );
         let text = p.encode();
         assert!(text.starts_with("dc1:"));
         let back = QrPayload::decode(&text).unwrap();
