@@ -54,12 +54,19 @@ license.
 | `androidx.compose:compose-bom` (ui, foundation, material3, animation, runtime) | 2026.09.00 | Apache-2.0 |
 | `androidx.activity:activity-compose` | 1.13.0 | Apache-2.0 |
 | `androidx.core:core-ktx` | 1.19.1 | Apache-2.0 |
-| `androidx.lifecycle:lifecycle-runtime-ktx`, `lifecycle-service` | 2.11.0 | Apache-2.0 |
+| `androidx.lifecycle:lifecycle-runtime-ktx`, `lifecycle-service`, `lifecycle-runtime-compose`, `lifecycle-viewmodel-compose` | 2.11.0 | Apache-2.0 |
+| `androidx.camera:camera-core`, `camera-camera2`, `camera-lifecycle`, `camera-view` | 1.6.2 | Apache-2.0 |
+| `com.google.zxing:core` | 3.5.3 | Apache-2.0 |
 | `org.junit:junit-bom` / JUnit Jupiter (test only) | 6.x | EPL-2.0 |
 | `com.southernstorm.noise` (vendored, see above) | MIT | MIT |
 
 All of the `androidx.*` and `androidx.compose.*` libraries are released under the
 Apache License 2.0 by The Android Open Source Project.
+
+CameraX is used only to stream camera frames to an in-process QR decoder for
+pairing, and ZXing performs that decode on-device. Google's ML Kit barcode
+scanner was evaluated and rejected: it reports usage metrics to Google by
+default, which conflicts with this project's no-telemetry rule.
 
 ## Windows app — `windows-app` (added in a later phase)
 

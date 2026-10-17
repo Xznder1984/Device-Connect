@@ -13,6 +13,7 @@ import dev.deviceconnect.protocol.MType
 import dev.deviceconnect.protocol.ProtocolException
 import dev.deviceconnect.protocol.Response
 import dev.deviceconnect.protocol.SecureTransport
+import dev.deviceconnect.protocol.SessionHelloAck
 import dev.deviceconnect.protocol.Wire
 import dev.deviceconnect.protocol.WireStream
 import java.io.Closeable
@@ -43,8 +44,15 @@ class Session(
      * that is enforced per-request by the handler, not by the hello.
      */
     private val enabledCaps: List<String>,
+    /**
+     * Called once the control plane exists and before `hello` is sent, so the
+     * caller can register its command handlers. Registering before `hello`
+     * matters: the peer may answer a request immediately after the ack, and a
+     * handler that is not there yet would look like an unsupported command.
+     */
+    private val installHandlers: (ControlPlane) -> Unit = {},
     /** Called once the handshake and hello exchange are done. */
-    private val onConnected: (remoteStatic: ByteArray, paired: Boolean) -> Unit,
+    private val onConnected: (remoteStatic: ByteArray, ack: SessionHelloAck) -> Unit,
     /** Called when the connection ends for any reason. [message] is safe to show. */
     private val onDisconnected: (message: String) -> Unit,
 ) : Closeable {
@@ -96,9 +104,10 @@ class Session(
 
                 val plane = ControlPlane(device) { frame -> secure.sendFrame(frame) }
                 control = plane
+                installHandlers(plane)
 
                 plane.onHelloAck = { ack ->
-                    onConnected(secure.remoteStatic, ack.paired)
+                    onConnected(secure.remoteStatic, ack)
                 }
                 plane.onProtocolMismatch = {
                     // Section 2.2: a pv mismatch aborts before other traffic.
@@ -132,7 +141,7 @@ class Session(
                 // envelope-shaped error, so the PC sees a real answer rather
                 // than a timeout (section 7).
                 val reply = Response.err(
-                    frame.seq.toLong(),
+                    frame.seq,
                     ErrorBody.of(ErrorCode.CAPABILITY_DISABLED, "channel not enabled on this device"),
                 )
                 try {

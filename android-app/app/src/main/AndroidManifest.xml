@@ -19,6 +19,26 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.CAMERA" />
 
+    <!--
+      The camera is only used to scan the pairing QR code the PC shows, and is
+      requested at runtime the first time the user chooses "Scan QR code".
+      It is optional so the app still installs on devices without one (they can
+      pair by typing the address, or over mDNS).
+    -->
+    <uses-feature
+        android:name="android.hardware.camera.any"
+        android:required="false" />
+
+    <!--
+      Android 17 (API 37) will gate local network access behind
+      ACCESS_LOCAL_NETWORK. This app targets API 36, where local network access
+      is implicitly granted by INTERNET, and the platform docs say not to
+      declare or request the permission until the target SDK is raised. When
+      targetSdk moves to 37 this manifest must add:
+        <uses-permission android:name="android.permission.ACCESS_LOCAL_NETWORK" />
+      and request it at runtime. See docs/android.md, "Local network access".
+    -->
+
     <application
         android:allowBackup="false"
         android:dataExtractionRules="@xml/data_extraction_rules"

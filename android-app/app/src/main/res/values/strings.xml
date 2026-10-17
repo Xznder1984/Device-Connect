@@ -9,9 +9,9 @@
     <!-- Notification body -->
     <string name="notif_waiting_title">Device Connect</string>
     <string name="notif_waiting_text">Waiting for your PC to connect</string>
+    <string name="notif_confirm_title">Confirm pairing</string>
+    <string name="notif_confirm_text">Check the six-digit code matches your PC</string>
     <string name="notif_connected_title">Device Connect</string>
     <string name="notif_connected_text">Connected to your PC</string>
-    <string name="notif_capture_title">Screen capture active</string>
-    <string name="notif_capture_text">Your PC can see this screen. Tap to open.</string>
     <string name="action_disconnect">Disconnect</string>
 </resources>

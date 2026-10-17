@@ -74,14 +74,19 @@ dependencies {
     implementation("androidx.compose.ui:ui-tooling-preview")
     implementation("androidx.compose.material3:material3")
 
-    // QR code generation and scanning
+    // Lifecycle-aware state collection for Compose (collectAsStateWithLifecycle).
+    implementation("androidx.lifecycle:lifecycle-runtime-compose:2.11.0")
+    implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.11.0")
+
+    // QR scanning: CameraX captures and streams frames, ZXing (Apache-2.0)
+    // decodes them entirely on-device. ML Kit is deliberately *not* used: it
+    // reports usage metrics to Google by default, and this project ships no
+    // telemetry. ZXing has no network code at all.
     implementation("com.google.zxing:core:3.5.3")
-    implementation("androidx.camera:camera-core:1.4.2")
-    implementation("androidx.camera:camera-camera2:1.4.2")
-    implementation("androidx.camera:camera-lifecycle:1.4.2")
-    implementation("androidx.camera:camera-view:1.4.2")
-    implementation("androidx.camera:camera-mlkit-vision:1.4.2")
-    implementation("com.google.mlkit:barcode-scanning:17.3.0")
+    implementation("androidx.camera:camera-core:1.6.2")
+    implementation("androidx.camera:camera-camera2:1.6.2")
+    implementation("androidx.camera:camera-lifecycle:1.6.2")
+    implementation("androidx.camera:camera-view:1.6.2")
 
     debugImplementation("androidx.compose.ui:ui-tooling")
 }
