@@ -28,8 +28,8 @@ Device-Connect/
                   OpenCode MCP configuration. Talks to the Windows app through a
                   named pipe.
   website/        Static marketing/docs site. No trackers, no cookies.
-  docs/           This file, protocol spec, threat model, limitations, legal
-                  notes, measurements, third-party notices.
+  docs/           architecture.md (design, threat model, limitations),
+                  protocol.md, and one status document per component.
   scripts/        PowerShell build and test scripts.
 ```
 
@@ -78,8 +78,9 @@ schema in `protocol/schema/`.
 2. **Bluetooth Classic (RFCOMM)** for control-plane channels (input,
    notifications, SMS, calls, clipboard) plus a best-effort low-frame-rate
    screen stream. BLE is used only for discovery and to wake the phone's
-   service before the RFCOMM link is opened. Measured throughput numbers go
-   into `docs/measurements.md`; the UI never promises more than measured.
+   service before the RFCOMM link is opened. Measured throughput numbers are to
+   go into a `docs/measurements.md` that does not exist yet; the UI never
+   promises more than measured, and nothing is claimed before it is measured.
 3. **Wi-Fi Direct / hotspot**: no new code path. Both are just IP networks;
    the phone hotspot case uses the same TCP transport with manual IP entry
    when mDNS is unavailable.
@@ -187,9 +188,11 @@ message bodies, contact names, keys or tokens.
 - **Battery optimizers** on aggressive OEM skins (notably Xiaomi, Huawei,
   Oppo) may still kill the foreground service. The app guides the user through
   the exemption request but cannot force it.
-- **Bluetooth throughput** is low: measured RFCOMM throughput is documented in
-  `docs/measurements.md` after Phase 4; the screen mirror over Bluetooth is
-  explicitly best-effort and low frame rate.
+- **Bluetooth throughput** is unmeasured. There is no RFCOMM transport in the
+  code yet on either side, so no number exists and none is quoted; a
+  `docs/measurements.md` will record the real figures if and when the transport
+  is written. The screen mirror over Bluetooth is planned as best-effort and low
+  frame rate.
 - **No iOS support yet.** The protocol is platform-neutral; there is no iOS
   client, and none is planned for v1.
 - **Doze/sleep**: when the phone sleeps deeply with Wi-Fi off, the PC cannot
@@ -214,4 +217,7 @@ message bodies, contact names, keys or tokens.
 This machine has limited space on C:, so all build caches are pointed at D::
 `ANDROID_HOME=D:\Android\Sdk`, `GRADLE_USER_HOME=D:\Albarr\cache\gradle`,
 `CARGO_TARGET_DIR=D:\Albarr\cache\cargo-target`, npm cache
-`D:\Albarr\cache\npm`. See `scripts/bootstrap.ps1`.
+`D:\Albarr\cache\npm`. These are all environment variables the tools respect, so
+nothing in the repository hard-codes a local path. The `scripts/bootstrap.ps1`
+that would set them on a fresh machine is **not written yet**; the commands in
+each component's README work without it.
