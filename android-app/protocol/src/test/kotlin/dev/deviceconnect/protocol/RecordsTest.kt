@@ -133,9 +133,48 @@ class RecordsTest {
     }
 
     @Test
+    fun recordCapsMatchTheSpecExactly() {
+        // section 2.2.1 states both caps as literal numbers. Pinning them here,
+        // and in the Rust suite, is what stops two implementations from
+        // drifting apart at the boundary: a receiver that is a few bytes
+        // stricter than its peer silently drops that peer's largest frames.
+        assertEquals(65_536, Records.MAX_HANDSHAKE_RECORD)
+        assertEquals(4 + 1_048_576 + 16, Records.MAX_TRANSPORT_RECORD)
+        assertEquals(1_048_596, Records.MAX_TRANSPORT_RECORD)
+
+        // The largest legal record on each path is accepted ...
+        assertInstanceOf(
+            Records.DecodeResult.Decoded::class.java,
+            Records.decode(record(ByteArray(Records.MAX_HANDSHAKE_RECORD)), Records.MAX_HANDSHAKE_RECORD),
+        )
+        assertInstanceOf(
+            Records.DecodeResult.Decoded::class.java,
+            Records.decode(record(ByteArray(Records.MAX_TRANSPORT_RECORD)), Records.MAX_TRANSPORT_RECORD),
+        )
+
+        // ... and exactly one byte more is refused up front, before any
+        // allocation proportional to the claimed length would be made.
+        assertThrows(ProtocolException::class.java) {
+            Records.decode(record(ByteArray(Records.MAX_HANDSHAKE_RECORD + 1)), Records.MAX_HANDSHAKE_RECORD)
+        }
+        assertThrows(ProtocolException::class.java) {
+            Records.decode(record(ByteArray(Records.MAX_TRANSPORT_RECORD + 1)), Records.MAX_TRANSPORT_RECORD)
+        }
+
+        // encode() enforces the identical bound on the way out.
+        assertInstanceOf(
+            Records.DecodeResult.Decoded::class.java,
+            Records.decode(Records.encode(ByteArray(Records.MAX_TRANSPORT_RECORD))),
+        )
+        assertThrows(ProtocolException::class.java) {
+            Records.encode(ByteArray(Records.MAX_TRANSPORT_RECORD + 1))
+        }
+    }
+
+    @Test
     fun handshakeAndTransportCapsAreIndependent() {
-        // A payload just under the transport cap is legal on the transport path.
-        val bigPayload = ByteArray(Records.MAX_TRANSPORT_RECORD - Records.LENGTH_BYTES)
+        // A payload at the transport cap is legal on the transport path.
+        val bigPayload = ByteArray(Records.MAX_TRANSPORT_RECORD)
         val record = Records.encode(bigPayload)
         assertInstanceOf(Records.DecodeResult.Decoded::class.java, Records.decode(record))
 

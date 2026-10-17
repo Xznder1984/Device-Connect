@@ -10,6 +10,7 @@ pub mod error_codes;
 pub mod framing;
 pub mod noise;
 pub mod qr;
+pub mod records;
 pub mod schema;
 
 pub use error_codes::ErrorCode;

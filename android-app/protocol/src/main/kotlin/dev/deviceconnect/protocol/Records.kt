@@ -20,16 +20,31 @@ import java.io.OutputStream
 object Records {
     const val LENGTH_BYTES = 4
 
-    /** Cap for a Noise handshake message; XX stays well under 1 KiB. */
+    /**
+     * Largest `len` a handshake message may declare, in bytes, per section
+     * 2.2.1. XX stays well under 1 KiB, so anything near this cap is a
+     * malformed or hostile peer and the connection is closed.
+     */
     const val MAX_HANDSHAKE_RECORD = 65536
 
-    /** Cap for an encrypted frame record: length + MAX_BODY_LEN + Poly1305 tag. */
+    /**
+     * Largest `len` an encrypted frame record may declare: the plaintext frame
+     * (`LENGTH_BYTES + MAX_BODY_LEN`) plus the 16-byte Poly1305 tag, which is
+     * the `4 + 1_048_576 + 16` bound stated in section 2.2.1.
+     */
     const val MAX_TRANSPORT_RECORD = LENGTH_BYTES + Framing.MAX_BODY_LEN + 16
 
-    /** Prefix [payload] with its length. */
+    /**
+     * Prefix [payload] with its length.
+     *
+     * [max] is the largest `len` section 2.2.1 permits, that is the size of the
+     * record *after* its 4-byte prefix. The cap is checked against the declared
+     * length before any allocation, so a hostile peer cannot make the receiver
+     * reserve a megabyte it never sent.
+     */
     fun encode(payload: ByteArray, max: Int = MAX_TRANSPORT_RECORD): ByteArray {
         if (payload.isEmpty()) throw ProtocolException("Incomplete")
-        if (payload.size > max - LENGTH_BYTES) throw ProtocolException("BodyTooLarge")
+        if (payload.size > max) throw ProtocolException("BodyTooLarge")
         val out = ByteArray(LENGTH_BYTES + payload.size)
         out[0] = (payload.size ushr 24).toByte()
         out[1] = (payload.size ushr 16).toByte()
@@ -58,7 +73,7 @@ object Records {
             ((buf[2].toInt() and 0xFF) shl 8) or
             (buf[3].toInt() and 0xFF)
         if (len <= 0) throw ProtocolException("BodyTooSmall")
-        if (len > max - LENGTH_BYTES) throw ProtocolException("BodyTooLarge")
+        if (len > max) throw ProtocolException("BodyTooLarge")
         val total = LENGTH_BYTES + len
         if (buf.size < total) return DecodeResult.NeedMore
         return DecodeResult.Decoded(buf.copyOfRange(LENGTH_BYTES, total), total)
@@ -84,7 +99,7 @@ object Records {
             throw ProtocolException("Incomplete")
         }
         if (len <= 0) throw ProtocolException("BodyTooSmall")
-        if (len > max - LENGTH_BYTES) throw ProtocolException("BodyTooLarge")
+        if (len > max) throw ProtocolException("BodyTooLarge")
         val payload = ByteArray(len)
         try {
             input.readFully(payload)

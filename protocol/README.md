@@ -7,7 +7,7 @@ the Windows app, the Android app, and any future macOS/Linux/iOS client.
 |---|---|
 | `schema/` | JSON Schemas (draft 2020-12) for every message on the wire |
 | `test-vectors/` | Golden vectors: framing, QR payloads, confirmation codes, Noise handshake KAT, schema fixtures |
-| `rust/` | Reference codec crate `dc-protocol` (used by the Windows app), includes generator for the Noise/confirm vectors |
+| `rust/` | Reference codec crate `dc-protocol` (used by the Windows app): framing, the record layer, QR pairing payloads, confirmation codes and Noise helpers. Also generates the Noise/confirm vectors. |
 | `conformance/ts/` | TypeScript conformance tests (framing, QR, schema) run with `node --test` |
 
 The Kotlin implementation lives in `android-app/protocol/` (module

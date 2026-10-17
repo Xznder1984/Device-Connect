@@ -21,11 +21,21 @@ pub fn prologue(qr_nonce: Option<&[u8; 16]>) -> Vec<u8> {
     out
 }
 
-fn builder<'a>(prologue: &'a [u8], local_static: &'a [u8; 32], eph: &'a [u8; 32]) -> Builder<'a> {
-    Builder::new(PARAMS.parse().expect("valid noise params"))
+/// Build a handshake state with the prologue and local static key already mixed
+/// in. `eph` fixes the ephemeral key so a transcript is reproducible; protocol
+/// code never sets it, only tests and vector generation do.
+pub(crate) fn builder<'a>(
+    prologue: &'a [u8],
+    local_static: &'a [u8; 32],
+    eph: Option<&'a [u8; 32]>,
+) -> Builder<'a> {
+    let builder = Builder::new(PARAMS.parse().expect("valid noise params"))
         .prologue(prologue)
-        .local_private_key(local_static)
-        .fixed_ephemeral_key_for_testing_only(eph)
+        .local_private_key(local_static);
+    match eph {
+        Some(key) => builder.fixed_ephemeral_key_for_testing_only(key),
+        None => builder,
+    }
 }
 
 /// Run the full 3-message XX handshake in memory with fixed keys.
@@ -40,8 +50,8 @@ pub fn handshake_in_memory(
     responder_eph: &[u8; 32],
     prologue: &[u8],
 ) -> Result<(Vec<u8>, Vec<u8>, Vec<u8>, TransportState, TransportState), snow::Error> {
-    let mut initiator = builder(prologue, initiator_static, initiator_eph).build_initiator()?;
-    let mut responder = builder(prologue, responder_static, responder_eph).build_responder()?;
+    let mut initiator = builder(prologue, initiator_static, Some(initiator_eph)).build_initiator()?;
+    let mut responder = builder(prologue, responder_static, Some(responder_eph)).build_responder()?;
 
     let mut msg1 = vec![0u8; 128];
     let n1 = initiator.write_message(&[], &mut msg1)?;

@@ -228,7 +228,7 @@ run; end-to-end verification against a live PC is Phase 4.
 
 | Area | State |
 | --- | --- |
-| `:protocol` conformance (framing, QR, confirm, Noise KAT, typed messages, record layer) | Implemented, tested (39 tests) |
+| `:protocol` conformance (framing, QR, confirm, Noise KAT, typed messages, record layer) | Implemented, tested (40 tests) |
 | `:app` shell, theme, home/consent screen, launcher | Implemented, builds |
 | Foreground service + mandatory notification (waiting / confirming / connected) | Implemented |
 | Device identity (Keystore-sealed X25519) and peer trust store | Implemented |

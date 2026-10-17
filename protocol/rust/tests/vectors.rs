@@ -5,6 +5,7 @@ use dc_protocol::confirm::confirmation_code;
 use dc_protocol::framing::{Frame, FrameDecoder, FrameError};
 use dc_protocol::noise::{handshake_in_memory, NoiseTransport};
 use dc_protocol::qr::{QrError, QrPayload};
+use dc_protocol::records::{self, DecodeResult};
 use dc_protocol::schema::*;
 use dc_protocol::ErrorCode;
 use serde_json::Value;
@@ -24,6 +25,13 @@ fn load(name: &str) -> Value {
 
 fn unhex(s: &str) -> Vec<u8> {
     hex::decode(s).expect("valid hex in vector")
+}
+
+fn unhex32(v: &Value, key: &str) -> [u8; 32] {
+    let bytes = unhex(v[key].as_str().unwrap());
+    let mut out = [0u8; 32];
+    out.copy_from_slice(&bytes);
+    out
 }
 
 #[test]
@@ -165,6 +173,54 @@ fn noise_known_answer() {
     .3);
     let c1 = wrap.encrypt(b"a").unwrap();
     assert_ne!(c1, wrap.encrypt(b"a").unwrap());
+}
+
+#[test]
+fn record_layer_carries_the_golden_transports() {
+    let kat = load("noise-kat.json");
+
+    // The record the initiator writes for the golden plaintext is the golden
+    // cipher, prefixed with its u32be length. That prefix is what the JVM and
+    // Rust implementations must agree on byte for byte; the Kotlin suite
+    // asserts the mirror image of this test.
+    let golden_cipher = unhex(kat["transports"][0]["cipherHex"].as_str().unwrap());
+    let record = records::encode(&golden_cipher, records::MAX_TRANSPORT_RECORD).expect("encode record");
+
+    let mut manual = (golden_cipher.len() as u32).to_be_bytes().to_vec();
+    manual.extend_from_slice(&golden_cipher);
+    assert_eq!(record, manual, "record is a u32be length plus the cipher");
+
+    // Reading it back yields the same bytes ...
+    let mut cursor = std::io::Cursor::new(record);
+    let read_back =
+        records::read_record(&mut cursor, records::MAX_TRANSPORT_RECORD).expect("read record");
+    assert_eq!(read_back, golden_cipher);
+
+    // ... and they still decrypt with the golden handshake's transport.
+    let (_m1, _m2, _m3, _it, rt) = handshake_in_memory(
+        &unhex32(&kat, "initiatorStaticPrivHex"),
+        &unhex32(&kat, "responderStaticPrivHex"),
+        &unhex32(&kat, "initiatorEphPrivHex"),
+        &unhex32(&kat, "responderEphPrivHex"),
+        &unhex(kat["prologueHex"].as_str().unwrap()),
+    )
+    .expect("handshake succeeds");
+    let mut responder = NoiseTransport::from_state(rt);
+    assert_eq!(
+        responder.decrypt(&read_back).unwrap(),
+        kat["transports"][0]["plain"].as_str().unwrap().as_bytes()
+    );
+
+    // The handshake messages travel through the same layer.
+    let m1 = unhex(kat["msg1Hex"].as_str().unwrap());
+    let framed = records::encode(&m1, records::MAX_HANDSHAKE_RECORD).expect("encode handshake record");
+    match records::decode(&framed, records::MAX_HANDSHAKE_RECORD).expect("decode handshake record") {
+        DecodeResult::Decoded { payload, bytes_consumed } => {
+            assert_eq!(payload, m1);
+            assert_eq!(bytes_consumed, 4 + m1.len());
+        }
+        DecodeResult::NeedMore => panic!("a complete record must not ask for more"),
+    }
 }
 
 #[test]

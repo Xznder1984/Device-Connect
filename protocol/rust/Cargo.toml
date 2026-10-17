@@ -3,7 +3,7 @@ name = "dc-protocol"
 version = "0.1.0"
 edition = "2021"
 license = "MIT"
-description = "Device Connect shared protocol codec: framing, QR pairing payloads, confirmation codes, Noise XX handshake helpers"
+description = "Device Connect shared protocol codec: framing, record layer, QR pairing payloads, confirmation codes, Noise XX handshake helpers"
 publish = false
 
 [dependencies]
