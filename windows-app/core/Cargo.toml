@@ -1,0 +1,24 @@
+[package]
+name = "dc-client"
+description = "Device Connect Windows core: PC identity, pairing offers, trust store and the responder session."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+dc-protocol.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+base64.workspace = true
+sha2.workspace = true
+x25519-dalek = { version = "2", features = ["static_secrets"] }
+rand_core = { version = "0.6", features = ["getrandom"] }
+
+[dev-dependencies]
+tempfile = "3"
+# The loopback test derives the phone's public key without going through
+# `dc-client`, so the two paths through the curve can be compared.
+x25519-dalek = { version = "2", features = ["static_secrets"] }
+serde_json = { workspace = true }

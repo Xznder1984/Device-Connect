@@ -68,13 +68,36 @@ pairing, and ZXing performs that decode on-device. Google's ML Kit barcode
 scanner was evaluated and rejected: it reports usage metrics to Google by
 default, which conflicts with this project's no-telemetry rule.
 
-## Windows app — `windows-app` (added in a later phase)
+## Rust — `windows-app` (crate `dc-client`)
 
-| Component | Version | License |
+Direct dependencies as of Phase 3a. Licenses were read from the manifests of the
+resolved versions (`cargo metadata`), not from memory.
+
+| Crate | Version | License |
 | --- | --- | --- |
-| Tauri | 2.x | Apache-2.0 OR MIT |
-| React / React DOM | 19.x | MIT |
-| Vite, TypeScript | current | MIT / Apache-2.0 |
+| `dc-protocol` (this repository) | 0.1.0 | MIT |
+| `serde`, `serde_json` | 1.x | MIT OR Apache-2.0 |
+| `thiserror` | 2.x | MIT OR Apache-2.0 |
+| `base64` | 0.22 | MIT OR Apache-2.0 |
+| `sha2` | 0.10 | MIT OR Apache-2.0 |
+| `x25519-dalek` | 2.0 | BSD-3-Clause |
+| `rand_core` (with `getrandom`) | 0.6 | MIT OR Apache-2.0 |
+| `tempfile` (dev only) | 3.x | MIT OR Apache-2.0 |
+
+Transitive crates worth naming: `curve25519-dalek`, `subtle` (BSD-3-Clause);
+`snow`, `chacha20poly1305`, `aes-gcm`, `ghash`, `poly1305`, `polyval`, `zeroize`
+(Apache-2.0 OR MIT); `memchr` (Unlicense OR MIT); `unicode-ident`
+((MIT OR Apache-2.0) AND Unicode-3.0); `r-efi` (MIT OR Apache-2.0 OR
+LGPL-2.1-or-later — the LGPL arm is not taken, and the crate is not compiled on
+Windows at all: it exists only for `getrandom`'s UEFI target). Nothing in the
+tree is GPL/AGPL/SSPL-only.
+
+`windows-app/Cargo.lock` is committed, so the set audited here is the set that
+gets built.
+
+The Tauri shell and the React/TypeScript UI are Phase 3b; when they land, Tauri
+itself is Apache-2.0 OR MIT and React is MIT, and their transitive sets belong in
+this section too.
 
 ## Website — `website` (added in a later phase)
 
