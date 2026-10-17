@@ -211,6 +211,40 @@ A request using a disabled capability returns
 `{"code":"CAPABILITY_DISABLED"}`. Capabilities default to off except
 `status` (implicit, device name/battery/transport only).
 
+Which capability a command needs is fixed, not left to each implementation: the
+phone refuses a command whose capability is off, so a disagreement here is either
+a security hole (a command runs with its switch off) or a permanently broken
+command (it can never run). The mapping is:
+
+| Commands | Capability |
+| --- | --- |
+| `clipboard.*` | `clipboard` |
+| `screen.*` | `screen_view` |
+| `input.*` | `input_control` |
+| `notifications.*` | `notifications` |
+| `sms.*` | `messages` |
+| `calls.*` | `calls` |
+| `files.*` | `files` |
+| `app.*`, `screentext.*`, `wait.*` | deliberately unassigned (see below) |
+| `status.*`, `caps.*`, `security.*` | none — must always be reachable |
+
+`status.*`, `caps.*` and `security.*` need no capability: turning a capability
+off must never lock the user out of turning it back on, and the phone must always
+be able to say what it is.
+
+`app.*`, `screentext.*` and `wait.*` are served by the same accessibility service
+as `input.*`, but they read on-screen content instead of injecting events, so
+whether they belong to `input_control`, `screen_view`, or both is left open until
+that layer is specified. Clients MUST NOT assume either yet.
+
+`contacts` is declared above but has no commands in v1.
+
+A phone MUST refuse a capability it does not implement, rather than storing it,
+advertising it in `hello`, and then failing every command that uses it. The reply
+to `caps.set` is the effective map over every capability the phone implements, so
+a client can tell "not supported here" from "supported but switched off" instead
+of guessing from absences.
+
 Sensitive commands MUST additionally return
 `{"code":"CONFIRM_REQUIRED","actionId":"..."}` when the phone's confirmation
 setting (default ON) demands it, and only execute after the user accepts on

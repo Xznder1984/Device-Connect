@@ -78,7 +78,28 @@ class ControlPlane(
     }
 
     private fun jsonFrame(mtype: Int, json: String): Frame =
-        Frame(Channel.CONTROL, mtype, Framing.FLAG_JSON, nextSeq(), json.toByteArray(StandardCharsets.UTF_8))
+        jsonFrame(mtype, json.toByteArray(StandardCharsets.UTF_8))
+
+    private fun jsonFrame(mtype: Int, payload: ByteArray): Frame =
+        Frame(Channel.CONTROL, mtype, Framing.FLAG_JSON, nextSeq(), payload)
+
+    /**
+     * Answer [id] with [json], unless it cannot fit in one frame.
+     *
+     * A handler can legitimately produce a large result (clipboard text is the
+     * first). `Framing` refuses anything over `MAX_BODY_LEN`, and that refusal
+     * would be thrown from `emit` and swallowed by the reader loop, leaving the
+     * peer waiting for a reply that never arrives. Saying "too large" instead
+     * preserves the rule that every request gets exactly one answer (section 7).
+     */
+    private fun emitResponse(id: Long, json: String) {
+        val payload = json.toByteArray(StandardCharsets.UTF_8)
+        if (payload.size > MAX_JSON_PAYLOAD) {
+            sendError(id, ErrorCode.INVALID_ARGS, "response too large")
+            return
+        }
+        emit(jsonFrame(MType.RESPONSE, payload))
+    }
 
     /**
      * Feed one control-channel frame in. Frames on other channels are ignored
@@ -168,7 +189,7 @@ class ControlPlane(
             // alone is what the peer needs (section 7: logs carry no content).
             Response.err(request.id, ErrorBody.of(ErrorCode.INTERNAL, "handler failed"))
         }
-        emit(jsonFrame(MType.RESPONSE, Wire.gson.toJson(response)))
+        emitResponse(request.id, Wire.gson.toJson(response))
     }
 
     private fun handleResponse(obj: JsonObject) {
@@ -188,5 +209,11 @@ class ControlPlane(
 
     companion object {
         const val PV = 1
+
+        /**
+         * Largest JSON payload one frame can carry: the body limit minus the
+         * fixed frame header that precedes the payload (section 2.3).
+         */
+        const val MAX_JSON_PAYLOAD = Framing.MAX_BODY_LEN - Framing.MIN_BODY_LEN
     }
 }

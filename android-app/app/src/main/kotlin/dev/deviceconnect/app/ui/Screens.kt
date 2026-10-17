@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
@@ -30,6 +31,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -44,6 +46,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
@@ -53,6 +56,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import dev.deviceconnect.app.R
 import dev.deviceconnect.app.discovery.Discovery
+import dev.deviceconnect.app.service.ImplementedCapabilities
 import dev.deviceconnect.app.service.LinkState
 
 /**
@@ -70,6 +74,7 @@ fun DeviceConnectApp(viewModel: MainViewModel = viewModel()) {
     val discovered by viewModel.discovered.collectAsStateWithLifecycle()
     val notice by viewModel.notice.collectAsStateWithLifecycle()
     val pairedName by viewModel.pairedPeerName.collectAsStateWithLifecycle()
+    val enabledCaps by viewModel.enabledCapabilities.collectAsStateWithLifecycle()
 
     val snackbarHostState = remember { SnackbarHostState() }
     LaunchedEffect(notice) {
@@ -99,9 +104,11 @@ fun DeviceConnectApp(viewModel: MainViewModel = viewModel()) {
                     deviceName = viewModel.deviceName,
                     deviceId = viewModel.deviceId,
                     pairedPeerName = pairedName,
+                    enabledCapabilities = enabledCaps,
                     onConnect = viewModel::openPairingOptions,
                     onReconnect = viewModel::reconnect,
                     onForget = viewModel::forgetPeer,
+                    onOpenCapabilities = viewModel::openCapabilities,
                 )
 
                 Screen.PairingOptions -> PairingOptionsScreen(
@@ -129,7 +136,14 @@ fun DeviceConnectApp(viewModel: MainViewModel = viewModel()) {
                 Screen.Connected -> ConnectedScreen(
                     link = link,
                     deviceId = viewModel.deviceId,
+                    enabledCapabilities = enabledCaps,
+                    onOpenCapabilities = viewModel::openCapabilities,
                     onDisconnect = viewModel::disconnect,
+                )
+
+                Screen.Capabilities -> CapabilitiesScreen(
+                    enabled = enabledCaps,
+                    onToggle = viewModel::setCapability,
                 )
             }
         }
@@ -144,6 +158,7 @@ private fun titleFor(screen: Screen): String = when (screen) {
     Screen.Discovered -> "PCs on this network"
     Screen.Confirm -> "Confirm pairing"
     Screen.Connected -> "Connected"
+    Screen.Capabilities -> "What your PC can use"
 }
 
 // ---------- Home ----------
@@ -154,9 +169,11 @@ private fun HomeScreen(
     deviceName: String,
     deviceId: String,
     pairedPeerName: String?,
+    enabledCapabilities: Set<String>,
     onConnect: () -> Unit,
     onReconnect: () -> Unit,
     onForget: () -> Unit,
+    onOpenCapabilities: () -> Unit,
 ) {
     val context = LocalContext.current
     val versionName = remember {
@@ -217,6 +234,15 @@ private fun HomeScreen(
         SectionHeading("Your control")
         Bullet("Disconnect or forget the PC at any time from this screen.")
         Bullet("Keys are generated here and sealed by the Android Keystore.")
+
+        SectionHeading("What your PC can use on this phone")
+        Text(
+            text = capabilitySummary(enabledCapabilities),
+            style = MaterialTheme.typography.bodyMedium,
+        )
+        OutlinedButton(onClick = onOpenCapabilities, modifier = Modifier.fillMaxWidth()) {
+            Text("Choose what to allow")
+        }
 
         Spacer(Modifier.height(8.dp))
 
@@ -532,7 +558,9 @@ private fun ConfirmScreen(
 private fun ConnectedScreen(
     link: LinkState,
     deviceId: String,
+    enabledCapabilities: Set<String>,
     onDisconnect: () -> Unit,
+    onOpenCapabilities: () -> Unit,
 ) {
     val connected = link as? LinkState.Connected
     Column(
@@ -560,9 +588,95 @@ private fun ConnectedScreen(
                 "it, and the only action on it ends the connection.",
             style = MaterialTheme.typography.bodyMedium,
         )
+        Text(
+            text = capabilitySummary(enabledCapabilities),
+            style = MaterialTheme.typography.bodyMedium,
+        )
+        OutlinedButton(onClick = onOpenCapabilities, modifier = Modifier.fillMaxWidth()) {
+            Text("Change what is allowed")
+        }
         Button(onClick = onDisconnect, modifier = Modifier.fillMaxWidth()) {
             Text(stringResource(R.string.action_disconnect))
         }
+    }
+}
+
+// ---------- Capabilities ----------
+
+/** One honest sentence about what is switched on right now. */
+private fun capabilitySummary(enabled: Set<String>): String {
+    val allowed = ImplementedCapabilities.entries.filter { it.id in enabled }
+    if (allowed.isEmpty()) return "Nothing. Every access is off until you turn it on."
+    return "Allowed: " + allowed.joinToString(", ") { it.title } + "."
+}
+
+@Composable
+private fun CapabilitiesScreen(
+    enabled: Set<String>,
+    onToggle: (String, Boolean) -> Unit,
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = 24.dp, vertical = 16.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
+    ) {
+        Text(
+            text = "Everything is off until you turn it on. The switch is enforced on " +
+                "this phone, so turning one off applies to the next command, not the " +
+                "next time you connect.",
+            style = MaterialTheme.typography.bodyMedium,
+        )
+
+        for (info in ImplementedCapabilities.entries) {
+            val on = info.id in enabled
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                shape = MaterialTheme.shapes.medium,
+                color = MaterialTheme.colorScheme.surfaceVariant,
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .toggleable(
+                            value = on,
+                            role = Role.Switch,
+                            onValueChange = { onToggle(info.id, it) },
+                        )
+                        .padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(16.dp),
+                ) {
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
+                        Text(text = info.title, style = MaterialTheme.typography.titleMedium)
+                        Text(text = info.detail, style = MaterialTheme.typography.bodyMedium)
+                    }
+                    // The whole row is the control, so the switch is inert and
+                    // there is no second label to drift out of sync with it.
+                    Switch(checked = on, onCheckedChange = null)
+                }
+            }
+        }
+
+        HorizontalDivider()
+        Text(
+            text = "Screen view, input control, notifications, messages, calls, " +
+                "contacts and files are not built yet, so no switch is offered for " +
+                "them. They will appear here as each one is finished.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Text(
+            text = "Sensitive commands will ask for confirmation on this phone before " +
+                "they run. That is a second check on top of these switches, not a " +
+                "replacement for them.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
     }
 }
 

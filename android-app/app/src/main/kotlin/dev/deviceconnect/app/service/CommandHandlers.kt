@@ -11,7 +11,8 @@ import android.os.StatFs
 import android.os.Environment
 import android.os.SystemClock
 import com.google.gson.JsonObject
-import dev.deviceconnect.protocol.Capability
+import com.google.gson.JsonPrimitive
+import dev.deviceconnect.protocol.Commands
 import dev.deviceconnect.protocol.ErrorCode
 import dev.deviceconnect.protocol.ErrorBody
 import dev.deviceconnect.protocol.Request
@@ -36,11 +37,34 @@ class CommandHandlers(
     private val onUnpair: () -> Unit,
 ) {
 
+    /** Text-only clipboard access for the clipboard channel (section 5). */
+    private val clipboard = ClipboardSync(context)
+
     /** Register every handler this build serves on [plane]. */
     fun register(plane: ControlPlane) {
         plane.register("status.get") { request -> status(request) }
         plane.register("caps.set") { request -> capsSet(request) }
         plane.register("security.unpair") { request -> unpair(request) }
+        plane.register("clipboard.get") { request -> gated(request, ::clipboardGet) }
+        plane.register("clipboard.set") { request -> gated(request, ::clipboardSet) }
+    }
+
+    /**
+     * Run [handler] only if the switch this command needs is on (section 4).
+     *
+     * The check is per request against the live store, so revoking a capability
+     * mid-session takes effect on the very next command with no reconnect and no
+     * reliance on the peer honouring the `hello` it was sent earlier.
+     */
+    private fun gated(request: Request, handler: (Request) -> Response): Response {
+        val capability = Commands.capabilityFor(request.cmd)
+        if (capability != null && !capabilities.isEnabled(capability)) {
+            return Response.err(
+                request.id,
+                ErrorBody.of(ErrorCode.CAPABILITY_DISABLED, "$capability is off on this phone"),
+            )
+        }
+        return handler(request)
     }
 
     /**
@@ -122,11 +146,14 @@ class CommandHandlers(
     }
 
     /**
-     * `caps.set` -> apply the requested switches.
+     * `caps.set` -> `{caps:{...}}`, the effective map (section 5).
      *
-     * The peer may only set switches the user can set in the app; there is no
-     * privileged path, so a compromised PC can never grant itself a capability
-     * the phone's owner has not already been able to grant.
+     * The peer may only set switches this build implements, and only to values
+     * the user can set in the app: there is no privileged path, so a compromised
+     * PC can never grant itself access the phone's owner could not grant.
+     * Capabilities this build does not implement are refused rather than stored:
+     * a switch the code cannot honour would be advertised in `hello` and then
+     * refused at the command, which is worse than saying no once.
      */
     private fun capsSet(request: Request): Response {
         val requested = mutableMapOf<String, Boolean>()
@@ -138,10 +165,16 @@ class CommandHandlers(
             if (!value.isJsonPrimitive || !value.asJsonPrimitive.isBoolean) {
                 return Response.err(request.id, ErrorBody.of(ErrorCode.INVALID_ARGS, "capability values must be booleans"))
             }
-            if (key !in KNOWN_CAPABILITIES) {
+            if (key !in Commands.DECLARED) {
                 // Unknown ids are refused rather than stored, so a newer PC
                 // cannot smuggle state this build does not understand.
                 return Response.err(request.id, ErrorBody.of(ErrorCode.INVALID_ARGS, "unknown capability"))
+            }
+            if (key !in ImplementedCapabilities.ids) {
+                return Response.err(
+                    request.id,
+                    ErrorBody.of(ErrorCode.INVALID_ARGS, "capability is not implemented in this build"),
+                )
             }
             requested[key] = value.asBoolean
         }
@@ -150,7 +183,12 @@ class CommandHandlers(
         }
 
         capabilities.apply(requested)
-        return Response.ok(request.id, JsonObject())
+        // Answer with the effective map, not just what was asked for: that is
+        // how the PC learns which switches this phone actually honoured.
+        return Response.ok(
+            request.id,
+            JsonObject().apply { add("caps", Wire.gson.toJsonTree(capabilities.snapshot())) },
+        )
     }
 
     /**
@@ -167,17 +205,51 @@ class CommandHandlers(
         return response
     }
 
-    companion object {
-        /** Every capability id this protocol defines (section 5). */
-        private val KNOWN_CAPABILITIES = setOf(
-            Capability.SCREEN_VIEW,
-            Capability.INPUT_CONTROL,
-            Capability.NOTIFICATIONS,
-            Capability.MESSAGES,
-            Capability.CALLS,
-            Capability.CONTACTS,
-            Capability.FILES,
-            Capability.CLIPBOARD,
+    /**
+     * `clipboard.get` -> `{text}` (section 5, clipboard channel).
+     *
+     * The three outcomes are reported distinctly. Android 10+ only lets the
+     * focused app read the clipboard, so "we cannot see it" is a normal,
+     * expected answer here and must not be flattened into an empty string, which
+     * would look like the user had copied nothing.
+     */
+    private fun clipboardGet(request: Request): Response = when (val read = clipboard.read()) {
+        is ClipboardSync.Read.Text -> Response.ok(
+            request.id,
+            JsonObject().apply { addProperty("text", read.value) },
         )
+        ClipboardSync.Read.Absent -> Response.err(
+            request.id,
+            ErrorBody.of(ErrorCode.NOT_FOUND, "no text on the clipboard"),
+        )
+        ClipboardSync.Read.TooLarge -> Response.err(
+            request.id,
+            ErrorBody.of(ErrorCode.UNSUPPORTED, "clipboard text is too large to transfer"),
+        )
+    }
+
+    /**
+     * `clipboard.set {text}` -> `{}`.
+     *
+     * The size is checked before anything is written, so an over-long request
+     * cannot leave the phone's clipboard in a half-changed state, and the reply
+     * is always a frame that fits.
+     */
+    private fun clipboardSet(request: Request): Response {
+        val args = request.args as? JsonObject
+        val text = (args?.get("text") as? JsonPrimitive)
+            ?.takeIf { it.isString }
+            ?.asString
+            ?: return Response.err(request.id, ErrorBody.of(ErrorCode.INVALID_ARGS, "text is required"))
+        if (ClipboardSync.utf8Bytes(text) > ClipboardSync.MAX_TEXT_BYTES) {
+            return Response.err(
+                request.id,
+                ErrorBody.of(ErrorCode.INVALID_ARGS, "clipboard text is too large to transfer"),
+            )
+        }
+        if (!clipboard.write(text)) {
+            return Response.err(request.id, ErrorBody.of(ErrorCode.UNAUTHORIZED, "clipboard is not available"))
+        }
+        return Response.ok(request.id, JsonObject())
     }
 }

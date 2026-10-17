@@ -13,6 +13,7 @@ import androidx.lifecycle.viewModelScope
 import dev.deviceconnect.app.net.Identity
 import dev.deviceconnect.app.net.TrustStore
 import dev.deviceconnect.app.discovery.Discovery
+import dev.deviceconnect.app.service.CapabilityState
 import dev.deviceconnect.app.service.ConnectionService
 import dev.deviceconnect.app.service.LinkState
 import dev.deviceconnect.app.service.Session
@@ -32,6 +33,7 @@ sealed interface Screen {
     data object Discovered : Screen
     data object Confirm : Screen
     data object Connected : Screen
+    data object Capabilities : Screen
 }
 
 /**
@@ -51,6 +53,16 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     /** mDNS scanning; only runs while the "found on network" screen is open. */
     val discovery = Discovery(appContext)
+
+    /**
+     * The switch store, shared with [ConnectionService]. It is a process
+     * singleton, so toggling here is what the handlers see on the next command;
+     * nothing is copied in between.
+     */
+    private val capabilities = CapabilityState.get(appContext)
+
+    /** Capability ids currently switched on, for the settings screen. */
+    val enabledCapabilities: StateFlow<Set<String>> = capabilities.enabledIds
 
     private val _link = MutableStateFlow<LinkState>(LinkState.Idle)
     val link: StateFlow<LinkState> = _link.asStateFlow()
@@ -130,6 +142,23 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             is LinkState.Connected -> Screen.Connected
             else -> Screen.Home
         }
+    }
+
+    /** Open the switch list. Works whether or not a PC is connected. */
+    fun openCapabilities() {
+        discovery.stop()
+        _screen.value = Screen.Capabilities
+    }
+
+    /**
+     * Turn a capability on or off. The change is written to the shared store and
+     * takes effect on the next command the phone receives, so revoking never
+     * waits for a reconnect.
+     */
+    fun setCapability(capability: String, enabled: Boolean) {
+        // The store refuses anything this build does not implement, so there is
+        // no second list of ids to keep in step here.
+        capabilities.set(capability, enabled)
     }
 
     fun dismissNotice() {

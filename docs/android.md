@@ -14,7 +14,7 @@ from *their own* Windows PC — nothing else.
 | Module | Type | Purpose |
 | --- | --- | --- |
 | `:protocol` | plain Kotlin/JVM library | Wire format: framing, QR payloads, confirmation codes, Noise XX handshake, typed JSON messages. Shares the golden vectors with the Rust and TypeScript implementations. |
-| `:app` | Android application | UI, foreground service, network transport, and — in later phases — screen capture and the system capabilities. |
+| `:app` | Android application | UI, foreground service, network transport, capability switches, and — in later phases — screen capture and the remaining system capabilities. |
 
 `:protocol` is deliberately *not* an Android module. Keeping it on plain JVM
 means its conformance tests run on any machine with a JDK and can be executed
@@ -114,17 +114,40 @@ switch:
 - `SYSTEM_ALERT_WINDOW` (runtime) — optional overlay, only for an in-app
   activity indicator, and only if the user turns it on.
 
-Later phases add the following capabilities, each behind its own switch:
+### Capabilities that are implemented
+
+One capability is shipped. It is off until the user turns it on in the app
+(*What your PC can use*), and the switch is enforced on the phone, per request:
+
+- **Clipboard** — `ClipboardManager`, text only, over the clipboard channel
+  (`clipboard.get` / `clipboard.set`). There is no clipboard watcher and no
+  background listener, so a clip leaves the phone only inside a reply to an
+  explicit request, and it is never written to a log. Android 10 and later only
+  let the *focused* app read the clipboard, so a read that arrives while the app
+  is not on screen is refused with `NOT_FOUND` instead of being answered with an
+  empty string: "cannot see it" and "it is empty" are different facts, and the PC
+  has to be able to tell them apart. Transfers are capped at 128 KiB
+  (`ClipboardSync.MAX_TEXT_BYTES`); the schema allows 1 MiB, but JSON escaping can
+  turn one character into six, and the smaller cap is what guarantees the reply
+  always fits in a single frame.
+
+### Capabilities that are not implemented yet
+
+Each needs a runtime permission or user-granted system access, declared only
+together with its own feature, in-app disclosure and switch:
 
 - **Input control** — an `AccessibilityService`. This is the only official API
   for injecting touch/gesture events. It must be enabled by the user in system
   settings, cannot be enabled by the app, and is disclosed before enabling.
 - **Notifications** — a `NotificationListenerService`, which requires the user
   to grant notification access in system settings.
-- **Clipboard** — `ClipboardManager`, read only while the app is in the
-  foreground or the user has opted in to background reads.
 - **Files** — the Storage Access Framework (SAF), so the user picks exactly the
   directories that are shared; no broad storage permission.
+
+No switch is offered for a capability that is not implemented, and `caps.set`
+refuses one with `INVALID_ARGS` rather than storing it. `hello` advertises exactly
+the implemented capabilities that are switched on, so the PC never believes it
+may do something the phone would then refuse.
 
 ---
 
@@ -135,8 +158,9 @@ Later phases add the following capabilities, each behind its own switch:
    confirming the code, connected). It cannot be swiped away, and its only
    action is Disconnect. When screen capture lands in a later phase it will use
    the same notification, switching to a "screen capture active" state.
-2. **In-app indicator.** The main screen always shows the connection state, and
-   will show which capabilities are enabled as each capability lands.
+2. **In-app indicator.** The home screen always states whether anything is
+   allowed and shows the connection state; the connected screen repeats it. The
+   switch list itself is reachable from both and needs no connection to use.
 3. **Screen capture uses the system dialog.** `MediaProjection` requires the
    Android system consent sheet every time; the app cannot capture silently in
    the background.
@@ -228,7 +252,7 @@ run; end-to-end verification against a live PC is Phase 4.
 
 | Area | State |
 | --- | --- |
-| `:protocol` conformance (framing, QR, confirm, Noise KAT, typed messages, record layer) | Implemented, tested (40 tests) |
+| `:protocol` conformance (framing, QR, confirm, Noise KAT, typed messages, record layer, command/capability map) | Implemented, tested (45 tests) |
 | `:app` shell, theme, home/consent screen, launcher | Implemented, builds |
 | Foreground service + mandatory notification (waiting / confirming / connected) | Implemented |
 | Device identity (Keystore-sealed X25519) and peer trust store | Implemented |
@@ -237,9 +261,9 @@ run; end-to-end verification against a live PC is Phase 4.
 | Pairing: find the PC over mDNS | Implemented |
 | Pairing: compare the six-digit confirmation code before pinning | Implemented |
 | Transport (TCP dial, Noise XX handshake, record layer, `hello`/`hello_ack`) | Implemented, **not yet run against a live PC** |
-| Control command dispatch (`status.get`, `caps.set`, `security.unpair`) | Implemented |
-| Capability toggles in the phone UI | Pending (added with the first capability that needs one) |
+| Control command dispatch (`status.get`, `caps.set`, `security.unpair`, `clipboard.get`, `clipboard.set`) | Implemented |
+| Capability switches in the phone UI, enforced per request | Implemented (clipboard is the only capability this build implements) |
 | Heartbeat / dead-link detection and reconnect backoff | Pending |
 | Screen capture (MediaProjection + H.264) | Pending |
 | Input control (Accessibility) | Pending |
-| Notification listener, SMS, clipboard, files | Pending |
+| Notification listener, SMS, files | Pending |

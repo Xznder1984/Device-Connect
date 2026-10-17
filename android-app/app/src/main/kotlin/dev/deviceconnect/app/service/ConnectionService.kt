@@ -74,7 +74,7 @@ class ConnectionService : Service() {
     override fun onCreate() {
         super.onCreate()
         identity = Identity.getOrCreate(this)
-        capabilities = CapabilityState(this)
+        capabilities = CapabilityState.get(this)
         trust = TrustStore(this)
         createNotificationChannel()
     }
