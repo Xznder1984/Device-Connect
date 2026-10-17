@@ -205,11 +205,55 @@ class RecordsTest {
      * its own buffer the handshake's read-ahead would swallow the leading bytes
      * of the first transport record. The protocol requires the initiator's
      * `hello` to follow the handshake immediately, which is exactly the shape
-     * this test exercises; it hangs rather than passing if the buffers ever
-     * diverge again.
+     * this test exercises.
+     *
+     * It is written single-threaded and deterministically: everything the
+     * responder will ever read is placed in the stream up front (msg1, msg3 and
+     * a real transport frame), the responder runs [HandshakeRunner] over it, and
+     * then the *same* [WireStream] must still yield the frame. If the handshake
+     * had wrapped its own buffer, those bytes would already be gone and this
+     * would fail rather than hang.
      */
     @Test
-    fun handshakeToTransportTransitionLosesNoBytes_disabled() {
+    fun handshakeAndTransportShareOneBuffer() {
+        val msg1 = TestVectors.hex(vectors.get("msg1Hex").asString)
+        val msg3 = TestVectors.hex(vectors.get("msg3Hex").asString)
+
+        // A real frame from the initiator's transport, exactly as the PC's
+        // `hello` would be, encrypted with the golden (deterministic) keys.
+        val initiatorTransport = replayHandshake().first
+        val greeting = Frame(
+            Channel.CONTROL,
+            MType.REQUEST,
+            Framing.FLAG_JSON,
+            1,
+            """{"t":"hello"}""".toByteArray(Charsets.UTF_8),
+        )
+        val greetingRecord = Records.encode(initiatorTransport.encrypt(Framing.encode(greeting)))
+
+        // Everything the responder needs, already in the pipe. The bytes are
+        // well under the 64 KiB read-ahead, so the handshake will pull the
+        // greeting record into its buffer.
+        val inbound = ByteArrayOutputStream()
+        Records.write(inbound, msg1, Records.MAX_HANDSHAKE_RECORD)
+        Records.write(inbound, msg3, Records.MAX_HANDSHAKE_RECORD)
+        inbound.write(greetingRecord)
+
+        val wire = WireStream(ByteArrayInputStream(inbound.toByteArray()), ByteArrayOutputStream())
+        val transport = HandshakeRunner.run(
+            wire = wire,
+            role = HandshakeState.RESPONDER,
+            prologue = TestVectors.hex(vectors.get("prologueHex").asString),
+            staticPrivate = TestVectors.hex(vectors.get("responderStaticPrivHex").asString),
+            fixedEphemeralPrivate = TestVectors.hex(vectors.get("responderEphPrivHex").asString),
+        )
+
+        val secure = SecureTransport(wire, transport)
+        assertEquals(
+            greeting,
+            secure.readFrame(),
+            "the first record after the handshake must survive the read-ahead",
+        )
     }
 
     private companion object {

@@ -132,7 +132,14 @@ object HandshakeRunner {
         fixedEphemeralPrivate: ByteArray? = null,
     ): NoiseTransport {
         val state = Noise.handshake(role, prologue, staticPrivate, fixedEphemeralPrivate)
-        try {
+
+        // The transport must be split *before* the handshake state is destroyed.
+        // split() derives the transport keys from the handshake's symmetric
+        // state, and HandshakeState.destroy() clears that state
+        // (SymmetricState.destroy() nulls its cipher), after which split()
+        // throws a NullPointerException. The pair split() returns is built from
+        // forked CipherState objects, so it outlives the handshake state.
+        val transport = try {
             if (role == HandshakeState.INITIATOR) {
                 Records.write(wire.output, Noise.write(state, ByteArray(0)), Records.MAX_HANDSHAKE_RECORD)
                 Noise.read(state, Records.read(wire.input, Records.MAX_HANDSHAKE_RECORD))
@@ -145,13 +152,11 @@ object HandshakeRunner {
             if (state.getAction() != HandshakeState.SPLIT) {
                 throw ProtocolException("HandshakeIncomplete")
             }
+            Noise.transport(state)
         } finally {
-            // The transport ciphers are freshly split off and owned by the
-            // caller, so destroying the handshake state only clears the
-            // handshake's own keys and never the transport's.
             state.destroy()
         }
-        val transport = Noise.transport(state)
+
         if (expectedRemoteStatic != null && !transport.remoteStatic.contentEquals(expectedRemoteStatic)) {
             transport.destroy()
             throw ProtocolException("RemoteUnknown")
