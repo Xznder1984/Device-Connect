@@ -16,12 +16,13 @@ use dc_client::pairing::{confirmation_code, PairingOffer};
 use dc_client::session::{accept, Arrival, Listener, PendingSession, SessionConfig, SessionError};
 use dc_client::store::FileSecretStore;
 use dc_client::trust::{FileTrustStore, TrustStore};
-use dc_client::{ActiveSession, HostInfo, Identity, Limits, RateLimit, Refusal};
+use dc_client::{ActiveSession, HostInfo, Identity, Limits, RateLimit, Refusal, DEAD_LINK};
 use dc_protocol::error_codes::ErrorCode;
 use dc_protocol::framing::{mtype, Channel, Frame};
 use dc_protocol::records::{handshake_over_stream, Role, SecureTransport, WireStream};
 use dc_protocol::schema::{
-    DeviceInfo, ErrorBody, Request, Response, SessionHello, SessionHelloAck,
+    DeviceInfo, ErrorBody, Heartbeat, HeartbeatKind, Request, Response, SessionHello,
+    SessionHelloAck,
 };
 use serde_json::{json, Value};
 use x25519_dalek::{PublicKey, StaticSecret};
@@ -144,6 +145,54 @@ impl Phone {
 
     fn respond(&mut self, response: &Response) {
         self.send_json(mtype::RESPONSE, response);
+    }
+
+    /// Read one frame the PC sent, or `None` when it hangs up.
+    fn recv_frame(&mut self) -> Option<Frame> {
+        self.transport.read_frame(&mut self.wire).ok()
+    }
+
+    /// Send a heartbeat on its own channel (section 2.8).
+    ///
+    /// The heartbeat has its own channel and its own frame sequence, so sending
+    /// one never disturbs the control channel's numbering.
+    fn send_heartbeat(&mut self, beat: Heartbeat) {
+        let payload = serde_json::to_vec(&beat).expect("serializes");
+        let frame = Frame::json(Channel::Heartbeat.id(), mtype::REQUEST, 0, payload);
+        self.transport
+            .send_frame(&mut self.wire, &frame)
+            .expect("write");
+        self.wire.flush().expect("flush");
+    }
+
+    /// The `{"t":"ping","ts":<ms>}` of section 2.8.
+    fn send_ping(&mut self, ts: u64) {
+        self.send_heartbeat(Heartbeat {
+            t: HeartbeatKind::Ping,
+            ts,
+        });
+    }
+
+    /// The answer to the PC's own ping.
+    fn send_pong(&mut self, ts: u64) {
+        self.send_heartbeat(Heartbeat {
+            t: HeartbeatKind::Pong,
+            ts,
+        });
+    }
+
+    /// Wait for the PC's `pong` and return the timestamp it echoed.
+    fn read_pong(&mut self) -> u64 {
+        let frame = self.recv_frame().expect("the PC answered the ping");
+        assert_eq!(
+            frame.channel,
+            Channel::Heartbeat.id(),
+            "a pong is on the heartbeat channel"
+        );
+        assert_eq!(frame.mtype, mtype::RESPONSE, "a pong is an answer frame");
+        let beat: Heartbeat = serde_json::from_slice(&frame.payload).expect("a heartbeat payload");
+        assert_eq!(beat.t, HeartbeatKind::Pong);
+        beat.ts
     }
 
     fn send_request(&mut self, cmd: &str, args: Value) -> u32 {
@@ -763,4 +812,95 @@ fn a_completed_pairing_clears_the_run_of_unattended_hellos() {
         pc.listener.rate_limit().lock_remaining().is_none(),
         "a pairing wiped the earlier hellos rather than counting them"
     );
+}
+
+// ----------------------------------------------------------------- heartbeat --
+
+#[test]
+fn a_heartbeat_ping_is_answered_while_the_pc_waits_for_a_reply() {
+    let pc = Harness::new();
+    let offer = pc.offer();
+
+    let phone = spawn_phone(pc.addr(), None, phone_secret(), |phone| {
+        phone.send_hello();
+        let _ = phone.read_ack();
+
+        // The PC asks something. Before answering, the phone checks that the PC
+        // is still there - and the PC must answer without mistaking the
+        // heartbeat for the reply it is waiting for.
+        let request = phone.recv_request().expect("a request");
+        phone.send_ping(1_700_000_000_123);
+        let echoed = phone.read_pong();
+        phone.respond(&Response::ok(request.id, json!({"battery": 73})));
+        echoed
+    });
+
+    let mut session = pc.pair_and_confirm(&offer);
+    let answer = session.request("status.get", json!({})).expect("an answer");
+    assert!(answer.ok);
+    assert_eq!(answer.result.unwrap()["battery"], 73);
+    assert!(
+        session.take_deferred().is_empty(),
+        "the ping was answered, not filed away for the app"
+    );
+
+    // The pong echoed the phone's own timestamp, so the phone can time the link
+    // with its own clock.
+    assert_eq!(phone.join().expect("phone thread"), 1_700_000_000_123);
+}
+
+#[test]
+fn a_heartbeat_pong_is_consumed_and_not_traffic_for_the_app() {
+    let pc = Harness::new();
+    let offer = pc.offer();
+
+    let phone = spawn_phone(pc.addr(), None, phone_secret(), |phone| {
+        phone.send_hello();
+        let _ = phone.read_ack();
+        let request = phone.recv_request().expect("a request");
+        // An answer to a PC ping, arriving before the reply to the request.
+        phone.send_pong(1_700_000_000_456);
+        phone.respond(&Response::ok(request.id, json!({"battery": 73})));
+        request.cmd
+    });
+
+    let mut session = pc.pair_and_confirm(&offer);
+    let answer = session.request("status.get", json!({})).expect("an answer");
+    assert!(answer.ok);
+    assert!(
+        session.take_deferred().is_empty(),
+        "a pong is housekeeping, not a frame to hand the app"
+    );
+    assert_eq!(phone.join().expect("phone thread"), "status.get");
+}
+
+#[test]
+fn the_pc_sends_its_own_heartbeat_ping() {
+    let pc = Harness::new();
+    let offer = pc.offer();
+
+    let phone = spawn_phone(pc.addr(), None, phone_secret(), |phone| {
+        phone.send_hello();
+        let _ = phone.read_ack();
+        // The PC says nothing on its own yet, so the next frame is the one this
+        // test asked for.
+        let frame = phone.recv_frame().expect("a ping");
+        (frame.channel, frame.mtype, frame.seq, frame.payload)
+    });
+
+    let mut session = pc.pair_and_confirm(&offer);
+
+    // The connection is milliseconds old: nothing has had time to go quiet, so
+    // a serving loop would not have a dead link to act on.
+    assert!(session.silence() < DEAD_LINK);
+
+    session.ping().expect("send a ping");
+
+    let (channel, mtype_byte, seq, payload) = phone.join().expect("phone thread");
+    assert_eq!(channel, Channel::Heartbeat.id());
+    assert_eq!(mtype_byte, mtype::REQUEST, "a ping is a request frame");
+    assert_eq!(seq, 0, "the heartbeat channel has its own sequence");
+    let beat: Heartbeat = serde_json::from_slice(&payload).expect("a heartbeat payload");
+    assert_eq!(beat.t, HeartbeatKind::Ping);
+    assert!(beat.ts > 0, "the ping carries the sender's clock");
 }

@@ -27,7 +27,7 @@ claimed to work anywhere in this repository.
 | --- | --- |
 | `protocol/` | **Implemented, tested.** Framing, the record layer, QR pairing payloads (nonce + expiry), six-digit confirmation codes, the Noise XX known-answer test, JSON Schemas and the golden vectors, with conformance suites in Rust and TypeScript here and a Kotlin/JVM one in `android-app/protocol/`, all reading the same vectors. |
 | `android-app/` | Implemented through Phase 2c: `:protocol` (46 tests) and the app - pairing by QR, by typed `ip:port` or by mDNS, device identity sealed in the Keystore, the peer trust store, the foreground service, the consent screen and the clipboard capability. Screen capture, input injection, notifications, SMS, calls, contacts and files are **Pending**. |
-| `windows-app/` | Phase 3a + 3b in part: `dc-client`, the responder core - identity whose key lives in the per-user **Windows Credential Manager**, pairing window, trust store, the session, and section 3's rate limit and lockout (38 unit + 12 end-to-end tests, all green). The Tauri shell and the React UI are **Pending** (Phase 3b), as is the heartbeat. |
+| `windows-app/` | Phase 3a + 3b in part: `dc-client`, the responder core - identity whose key lives in the per-user **Windows Credential Manager**, pairing window, trust store, the session, section 3's rate limit and lockout, and the answering half of the heartbeat (38 unit + 15 end-to-end tests, all green). The Tauri shell and the React UI are **Pending** (Phase 3b). |
 | `mcp-server/` | **Not started.** |
 | `website/` | **Not started.** |
 
@@ -81,7 +81,7 @@ Windows:
 
 ```powershell
 Set-Location windows-app
-cargo test          # 38 unit tests + 12 tests over a real loopback socket
+cargo test          # 38 unit tests + 15 tests over a real loopback socket
 ```
 
 On a machine with little space on `C:`, point the caches elsewhere first:
@@ -113,11 +113,18 @@ The short version, because it is the reason the project exists:
   Keystore; the PC's is an entry in the per-user Windows Credential Manager, not
   a file. Neither store separates programs running as the same user, and neither
   is described as if it did.
+- **A quiet link is measured, not yet closed.** The PC answers the spec's
+  heartbeat (`ping` on channel `0x09` gets a `pong` echoing its timestamp) and can
+  send one, but nothing paces a ping every 5 s or hangs up on a link that has been
+  silent for 15 s: that belongs to the serving loop the Tauri shell will bring, and
+  the phone sends no heartbeat at all yet, so a link that closed itself would hang
+  up on a phone behaving exactly as this build's phone behaves.
 
-What is *not* protected yet is listed with the rest: the PC has no heartbeat, and
-nothing tells the phone when its connection was refused by the rate limit, so no
-warning can be shown on it. Both are in `docs/windows.md`, `docs/android.md` and
-`docs/architecture.md` section 6, which is the honest list of limitations.
+What is *not* protected yet is listed with the rest: the PC's own heartbeat and
+the dead-link close are not wired up, and nothing tells the phone when its
+connection was refused by the rate limit, so no warning can be shown on it. Both
+are in `docs/windows.md`, `docs/android.md` and `docs/architecture.md` section 6,
+which is the honest list of limitations.
 
 ## License
 

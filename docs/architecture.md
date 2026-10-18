@@ -219,6 +219,13 @@ message bodies, contact names, keys or tokens.
   no cleartext error frame; the PC closes the socket, and the phone-side warning
   notification the spec asks for is not implemented. `docs/windows.md` and
   `docs/android.md` both say so.
+- **The PC does not yet hold anyone to the heartbeat.** It answers a `ping` and
+  consumes a `pong` (section 2.8) and can send a `ping` of its own, but nothing
+  paces those pings every 5 s or closes a link that has been quiet for 15 s: that
+  needs a serving loop, and the phone sends no heartbeat at all yet. A link that
+  dies without a FIN is still noticed only when a request times out, and the close
+  is deliberately not wired into the connection while that is true
+  (`docs/windows.md`, "Heartbeat").
 - **Windows: no mDNS advertisement yet.** The phone can browse for
   `_deviceconnect._tcp`; the PC does not announce it until the Phase 3b shell
   exists, so pairing today is a typed `ip:port` or a QR.

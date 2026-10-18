@@ -35,7 +35,7 @@ windows-app/
   Cargo.toml            Workspace. members = ["core"] (and "src-tauri" in Phase 3b)
   core/
     Cargo.toml          dc-client
-    src/lib.rs          Module list, re-exports, unix_now()
+    src/lib.rs          Module list, re-exports, unix_now()/unix_now_ms()
     src/identity.rs     X25519 key pair; the device id is derived from the key
     src/pairing.rs      One pairing window: QR payload, nonce, prologue, expiry
     src/store.rs        SecretStore trait + FileSecretStore, atomic writes
@@ -73,6 +73,11 @@ string in the core would put a wrong claim on the wire (see `identity.rs`).
   `ActiveSession`, with the `hello` exchange, the confirmation code, request
   replies and `security.unpair` in both directions. `accept()` returns an
   `Arrival`, so a refused connection is a normal outcome rather than an error.
+- **Heartbeat** (section 2.8). A `ping` is answered with a `pong` the moment the
+  session reads one, and a `pong` is consumed, so no caller of `ActiveSession`
+  ever sees a heartbeat frame or has to remember to answer one. The PC can send
+  its own `ping`; pacing them and closing a silent link is the serving loop's job,
+  which is not built yet - see `docs/windows.md`, "Heartbeat".
 - **Rate limit and lockout** (section 3). Ten handshake attempts a minute per
   source address, and a listener-wide lock once one address sends more than five
   `hello`s that never become a pairing. It is decided before a byte is decrypted,

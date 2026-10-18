@@ -270,7 +270,7 @@ run; end-to-end verification against a live PC is Phase 4.
 | Transport (TCP dial, Noise XX handshake, record layer, `hello`/`hello_ack`) | Implemented, **not yet run against a live PC** |
 | Control command dispatch (`status.get`, `caps.set`, `security.unpair`, `clipboard.get`, `clipboard.set`) | Implemented |
 | Capability switches in the phone UI, enforced per request | Implemented (clipboard is the only capability this build implements) |
-| Heartbeat / dead-link detection and reconnect backoff | Pending |
+| Heartbeat / dead-link detection and reconnect backoff | Pending on the phone: nothing here sends a `ping`, answers one, or backs off before reconnecting. The PC half exists (`docs/windows.md`, "Heartbeat") |
 | Screen capture (MediaProjection + H.264) | Pending |
 | Input control (Accessibility) | Pending |
 | Notification listener, SMS, files | Pending |

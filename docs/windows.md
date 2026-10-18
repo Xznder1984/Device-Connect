@@ -25,7 +25,7 @@ marked Implemented has been compiled and run on Windows.
 | `security.unpair` in both directions | Implemented |
 | Session listener + QR pairing listener + mDNS advertisement | Pending (Phase 3b; see "The prologue fixes the mode") |
 | Tauri shell and React UI | Pending |
-| Heartbeat / dead-link detection (`ping`/`pong`) | Pending on both sides; the reply timeout is the only detection today |
+| Heartbeat (`ping`/`pong`) | Partly implemented: the PC answers a `ping` and consumes a `pong` (section 2.8). Sending its own pings and closing a silent link is the serving loop's job - see "Heartbeat" |
 | Listener rate limit and lockout (section 3) | Implemented, PC-side: per-address attempt bucket, listener-wide lockout. Nothing tells the phone why it was refused - see "Rate limit and lockout" |
 | Windows Credential Manager for the long-term key | Implemented (`CredManSecretStore`; the file store stays for headless runs and tests) |
 | Windows Firewall allowance | Not yet exercised; the shell will be the first thing that binds a listener |
@@ -212,6 +212,33 @@ is how: an attacker does not care which of the PC's sockets answers.
 
 ---
 
+## Heartbeat
+
+Section 2.8 asks both sides to send `{"t":"ping","ts":<ms>}` on channel `0x09`
+every 5 s, to answer a `ping` with `{"t":"pong","ts":<echo>}`, and to call a link
+dead after 15 s without a frame. The PC implements the answering half:
+
+- **A `ping` is answered wherever it is read.** `ActiveSession::recv` is the only
+  read path, and heartbeat frames are handled inside it: a `ping` is answered with
+  a `pong` that echoes the sender's own timestamp, and a `pong` is consumed.
+  Neither is ever returned to a caller, so an app loop neither sees a heartbeat
+  nor has to remember to answer one. `await_response` reads through the same
+  method, so a phone that checks the link while the PC is waiting for a reply gets
+  its `pong` and then the reply, in that order.
+- **The PC can send its own `ping`** (`ActiveSession::ping`). Nothing calls it on
+  a timer yet, because there is no serving loop to pace it; it exists so the loop
+  can, and so "both sides send" is true of this side rather than assumed.
+- **Silence is measured, not acted on.** `ActiveSession::silence` reports how long
+  the link has been quiet and `DEAD_LINK` is the spec's 15 s, but the PC does not
+  close a quiet link by itself. That is a deliberate limit of this build, not an
+  oversight: today's phone sends no heartbeat at all (`docs/android.md` lists it
+  as Pending), so a connection that closed itself after 15 s of silence would hang
+  up on a phone behaving exactly as this build's phone behaves. The decision
+  belongs to a serving loop, which is also the only place it can be made, since the
+  PC is the listener and never dials.
+
+---
+
 ## Secrets
 
 | What | Where |
@@ -278,7 +305,7 @@ Two kinds:
   without `dc-client`, so "the PC saw the right key" is checked across two paths
   through the same curve rather than inside one.
 
-The twelve end-to-end cases:
+The fifteen end-to-end cases:
 
 1. a new phone is offered a code and is pinned only by `confirm()`;
 2. a disabled capability comes back as a refusal, and the session stays usable;
@@ -294,7 +321,12 @@ The twelve end-to-end cases:
 11. six unattended `hello`s lock the listener, and the next phone is refused
     without a handshake;
 12. a confirmed pairing wipes the run of unattended `hello`s, so a pairing does
-    not count towards a lockout.
+    not count towards a lockout;
+13. a `ping` sent while the PC waits for a reply is answered with a `pong` that
+    echoes its timestamp, and the reply still reaches the caller;
+14. a stray `pong` is consumed rather than handed to the app;
+15. the PC's own `ping` leaves on channel `0x09` as a request frame, numbered by
+    the heartbeat channel's own sequence.
 
 What these do **not** cover: the Android app itself. The phone here is a test
 double that speaks the same implementation and the same golden vectors, which is
@@ -312,9 +344,12 @@ Each of these is a real gap, not a stub with a friendly name:
    not built, and cannot be from the PC alone: a locked listener refuses before
    the handshake, so there is no encrypted channel to say it on, and section 2
    has no cleartext error frame. It is listed in `docs/android.md` too.
-2. **Heartbeat.** `ping`/`pong` on channel `0x09` is not implemented on either
-   side, so a link that dies without a FIN is only noticed when a request next
-   times out.
+2. **The PC's own heartbeat, and the dead-link close.** The PC answers a `ping`
+   and can send one, but nothing paces a `ping` every 5 s and nothing closes a
+   link that has been quiet for 15 s: both need the serving loop of item 3. They
+   are deliberately not wired into the connection, because today's phone sends no
+   heartbeat, so a link that closed itself on silence would hang up on a phone
+   behaving exactly as this build's phone behaves.
 3. **Tauri shell, React UI, session listener, QR pairing listener, mDNS
    advertisement.** Until mDNS advertises, the phone's "find the PC" path has
    nothing to find, and the only ways to pair are a typed `ip:port` or a QR whose

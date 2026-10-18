@@ -36,7 +36,7 @@ pub use limit::{Admitted, Limits, RateLimit, Refusal};
 pub use pairing::PairingOffer;
 pub use session::{
     accept, local_address, ActiveSession, Arrival, Listener, PendingSession, SessionConfig,
-    SessionError, SessionInfo,
+    SessionError, SessionInfo, DEAD_LINK, PING_INTERVAL,
 };
 pub use store::{
     default_secret_store, default_store_name, FileSecretStore, SecretStore, StoreError,
@@ -53,5 +53,17 @@ pub fn unix_now() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map(|d| d.as_secs())
+        .unwrap_or(0)
+}
+
+/// Milliseconds since the Unix epoch, or 0 if the clock reads before it.
+///
+/// The heartbeat carries milliseconds (protocol section 2.8). The value is
+/// echoed back, not compared to anything, so it is a clock reading and never a
+/// measurement of anything secret.
+pub fn unix_now_ms() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_millis() as u64)
         .unwrap_or(0)
 }

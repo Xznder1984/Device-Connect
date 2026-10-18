@@ -19,19 +19,23 @@
 //! lockout for repeated unattended `hello`s. A refused connection is closed
 //! without reading a byte of it, so [`Arrival`] - not a bare `TcpStream` - is
 //! what a listener hands over.
+//!
+//! Once a session is up, a heartbeat `ping` is answered the moment it is read
+//! (section 2.8); the PC's own pings, and the silence that means a dead link,
+//! wait for a serving loop to pace them - see [`DEAD_LINK`] and `docs/windows.md`.
 
 use std::collections::HashMap;
 use std::io;
 use std::net::{IpAddr, SocketAddr, TcpListener, TcpStream, UdpSocket};
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use dc_protocol::error_codes::ErrorCode;
 use dc_protocol::framing::{mtype, Channel, Frame};
 use dc_protocol::records::{handshake_over_stream, RecordError, Role, SecureTransport, WireStream};
 use dc_protocol::schema::{
-    request_frame, response_frame, ErrorBody, Event, Request, Response, SessionHello,
-    SessionHelloAck,
+    request_frame, response_frame, ErrorBody, Event, Heartbeat, HeartbeatKind, Request, Response,
+    SessionHello, SessionHelloAck,
 };
 use serde_json::{json, Value};
 
@@ -54,6 +58,16 @@ pub const HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(10);
 /// a little longer than that means a busy phone answers rather than looking
 /// dead.
 pub const DEFAULT_REPLY_TIMEOUT: Duration = Duration::from_secs(15);
+
+/// How often each side sends a heartbeat `ping` (protocol section 2.8).
+pub const PING_INTERVAL: Duration = Duration::from_secs(5);
+
+/// How long a link may be silent before section 2.8 calls it dead.
+///
+/// The PC answers a `ping` the moment it reads one, but it does not yet hold
+/// anyone to this: nothing on the PC sends its own pings or closes a quiet link,
+/// because that needs a serving loop to pace it. See `docs/windows.md`.
+pub const DEAD_LINK: Duration = Duration::from_secs(15);
 
 /// Something that ended a connection.
 #[derive(Debug, thiserror::Error)]
@@ -255,6 +269,9 @@ struct Connection {
     /// The read budget in force right now: the handshake budget until the hello
     /// exchange is done, the reply timeout afterwards.
     timeout: Duration,
+    /// When the last frame arrived from the phone, which is what the dead-link
+    /// rule in section 2.8 is measured against.
+    last_received: Instant,
 }
 
 impl Connection {
@@ -280,9 +297,9 @@ impl Connection {
 
     fn recv(&mut self) -> Result<Frame, SessionError> {
         let timeout = self.timeout;
-        match self.transport.read_frame(&mut self.wire) {
-            Ok(frame) => Ok(frame),
-            Err(RecordError::Incomplete) => Err(SessionError::Closed),
+        let frame = match self.transport.read_frame(&mut self.wire) {
+            Ok(frame) => frame,
+            Err(RecordError::Incomplete) => return Err(SessionError::Closed),
             Err(RecordError::Io(ref e))
                 if matches!(
                     e.kind(),
@@ -293,10 +310,19 @@ impl Connection {
                 // so the stream can no longer be resynchronised. Report it and
                 // let the caller drop the session: retrying here would splice two
                 // different records together.
-                Err(SessionError::Timeout(timeout))
+                return Err(SessionError::Timeout(timeout));
             }
-            Err(other) => Err(SessionError::Record(other)),
-        }
+            Err(other) => return Err(SessionError::Record(other)),
+        };
+        // Any frame counts, a heartbeat as much as a request: section 2.8 calls a
+        // link dead after 15 s of silence, not after 15 s without a reply.
+        self.last_received = Instant::now();
+        Ok(frame)
+    }
+
+    /// How long since the last frame arrived from the phone.
+    fn silence(&self) -> Duration {
+        self.last_received.elapsed()
     }
 
     fn shutdown(self) {
@@ -415,8 +441,84 @@ impl ActiveSession {
 
     /// Read the next frame. For callers that drive their own loop; [`request`]
     /// uses it internally.
+    ///
+    /// A heartbeat is transport housekeeping rather than traffic for the app, so
+    /// it is handled here: a `ping` is answered and a `pong` is consumed, and
+    /// neither is ever returned (section 2.8). Everything else arrives as it was
+    /// sent.
     pub fn recv(&mut self) -> Result<Frame, SessionError> {
-        self.conn.recv()
+        loop {
+            let frame = self.conn.recv()?;
+            if self.answer_heartbeat(&frame)? {
+                continue;
+            }
+            return Ok(frame);
+        }
+    }
+
+    /// Answer a heartbeat `ping` with a `pong`, and swallow a `pong`.
+    ///
+    /// Returns whether `frame` was a heartbeat this build understood. A frame on
+    /// the heartbeat channel that does not parse is *not* understood, and is left
+    /// to the caller like any other frame.
+    fn answer_heartbeat(&mut self, frame: &Frame) -> Result<bool, SessionError> {
+        if frame.channel != Channel::Heartbeat.id() || !frame.is_json() {
+            return Ok(false);
+        }
+        let beat: Heartbeat = match serde_json::from_slice(&frame.payload) {
+            Ok(beat) => beat,
+            Err(_) => return Ok(false),
+        };
+        match beat.t {
+            // Echo the sender's own timestamp, which is what lets them measure
+            // the round trip; it is their clock, not ours.
+            HeartbeatKind::Ping => {
+                let channel = Channel::Heartbeat.id();
+                let seq = self.conn.next_seq(channel);
+                let pong = Heartbeat {
+                    t: HeartbeatKind::Pong,
+                    ts: beat.ts,
+                };
+                let payload = serde_json::to_vec(&pong)
+                    .map_err(|e| SessionError::Message(format!("heartbeat: {e}")))?;
+                self.conn
+                    .send(&Frame::json(channel, mtype::RESPONSE, seq, payload))?;
+            }
+            // Nothing to do. The frame arriving at all is the evidence, and
+            // `Connection::recv` has already recorded it.
+            HeartbeatKind::Pong => {}
+        }
+        Ok(true)
+    }
+
+    /// Send a heartbeat `ping` (section 2.8).
+    ///
+    /// The spec has both sides ping every [`PING_INTERVAL`]; nothing calls this on
+    /// a timer yet, because on the PC that needs a serving loop to pace it and to
+    /// read the replies. It is here so the loop has something to call, and so the
+    /// PC's half of the heartbeat exists rather than being assumed.
+    pub fn ping(&mut self) -> Result<(), SessionError> {
+        let channel = Channel::Heartbeat.id();
+        let seq = self.conn.next_seq(channel);
+        let ping = Heartbeat {
+            t: HeartbeatKind::Ping,
+            ts: crate::unix_now_ms(),
+        };
+        let payload = serde_json::to_vec(&ping)
+            .map_err(|e| SessionError::Message(format!("heartbeat: {e}")))?;
+        self.conn
+            .send(&Frame::json(channel, mtype::REQUEST, seq, payload))
+    }
+
+    /// How long since the last frame arrived from the phone.
+    ///
+    /// Compare it against [`DEAD_LINK`] to apply section 2.8's rule. Closing on
+    /// it is deliberately *not* done here: today's phone sends no heartbeat, so a
+    /// link that closes itself on silence would hang up on a phone that is
+    /// behaving exactly as this build's phone behaves. That decision belongs to
+    /// the serving loop, when there is one. See `docs/windows.md`.
+    pub fn silence(&self) -> Duration {
+        self.conn.silence()
     }
 
     /// Send one frame directly. Exposed so the app can answer an inbound request
@@ -459,7 +561,9 @@ impl ActiveSession {
     fn await_response(&mut self, id: u32, cmd: &str) -> Result<Response, SessionError> {
         let control = Channel::Control.id();
         loop {
-            let frame = self.conn.recv()?;
+            // Through `recv`, so a heartbeat from the phone is answered rather
+            // than left in `deferred` while the phone waits for a `pong`.
+            let frame = self.recv()?;
 
             if frame.channel != control || !frame.is_json() {
                 // Video, file data and anything else the PC does not consume yet.
@@ -495,8 +599,10 @@ impl ActiveSession {
                 continue;
             }
 
-            // A session message (`t`) such as a heartbeat is not part of the
-            // request/response flow and needs no answer here.
+            // A session message (`t`) on the control channel is session
+            // negotiation (section 2.2), not traffic for this flow; a heartbeat
+            // is not one of these, because it lives on its own channel and
+            // `recv` has already answered it. Nothing here needs a reply.
             if value.get("t").is_some() {
                 continue;
             }
@@ -601,13 +707,17 @@ pub fn accept(
         seq: HashMap::new(),
         next_id: 1,
         timeout: HANDSHAKE_TIMEOUT,
+        // The handshake itself is the first frame's worth of liveness; nothing
+        // reads this until a session exists.
+        last_received: Instant::now(),
     };
 
     let hello = read_hello(&mut conn)?;
 
     // The handshake budget is generous; normal traffic is not. From here on an
-    // unanswered request means the link is dead (section 2.8 will add the
-    // heartbeat that spots this sooner).
+    // unanswered request means the link is dead (section 2.8's heartbeat spots
+    // this sooner, but nothing on the PC sends its own pings yet; see
+    // `docs/windows.md`).
     conn.set_read_timeout(config.reply_timeout)?;
     conn.timeout = config.reply_timeout;
 
