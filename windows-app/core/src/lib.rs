@@ -27,13 +27,18 @@ pub mod session;
 pub mod store;
 pub mod trust;
 
+#[cfg(windows)]
+pub mod credman;
+
 pub use identity::{HostInfo, Identity};
 pub use pairing::PairingOffer;
 pub use session::{
     accept, local_address, ActiveSession, Listener, PendingSession, SessionConfig, SessionError,
     SessionInfo,
 };
-pub use store::{FileSecretStore, SecretStore, StoreError};
+pub use store::{
+    default_secret_store, default_store_name, FileSecretStore, SecretStore, StoreError,
+};
 pub use trust::{FileTrustStore, Peer, TrustStore};
 
 use std::time::{SystemTime, UNIX_EPOCH};

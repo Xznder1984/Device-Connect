@@ -16,6 +16,16 @@ sha2.workspace = true
 x25519-dalek = { version = "2", features = ["static_secrets"] }
 rand_core = { version = "0.6", features = ["getrandom"] }
 
+# The PC's long-term key goes in the per-user Windows Credential Manager instead
+# of a file (`src/credman.rs`). `windows-sys` is the raw API surface, which is all
+# this needs; the features are the two that carry CredRead/CredWrite and
+# GetLastError.
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = [
+    "Win32_Foundation",
+    "Win32_Security_Credentials",
+] }
+
 [dev-dependencies]
 tempfile = "3"
 # The loopback test derives the phone's public key without going through

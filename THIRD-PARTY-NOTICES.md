@@ -82,11 +82,13 @@ resolved versions (`cargo metadata`), not from memory.
 | `sha2` | 0.10 | MIT OR Apache-2.0 |
 | `x25519-dalek` | 2.0 | BSD-3-Clause |
 | `rand_core` (with `getrandom`) | 0.6 | MIT OR Apache-2.0 |
+| `windows-sys` (Windows only) | 0.61 | MIT OR Apache-2.0 |
 | `tempfile` (dev only) | 3.x | MIT OR Apache-2.0 |
 
 Transitive crates worth naming: `curve25519-dalek`, `subtle` (BSD-3-Clause);
-`snow`, `chacha20poly1305`, `aes-gcm`, `ghash`, `poly1305`, `polyval`, `zeroize`
-(Apache-2.0 OR MIT); `memchr` (Unlicense OR MIT); `unicode-ident`
+`snow`, `chacha20poly1305`, `aes-gcm`, `ghash`, `poly1305`, `polyval`, `zeroize`,
+`windows-link`, `windows-targets` (Apache-2.0 OR MIT); `memchr`
+(Unlicense OR MIT); `unicode-ident`
 ((MIT OR Apache-2.0) AND Unicode-3.0); `r-efi` (MIT OR Apache-2.0 OR
 LGPL-2.1-or-later — the LGPL arm is not taken, and the crate is not compiled on
 Windows at all: it exists only for `getrandom`'s UEFI target). Nothing in the

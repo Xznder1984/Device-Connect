@@ -15,14 +15,16 @@ is calling, and then answers only what the user has approved.
 
 | Module | Type | Purpose |
 | --- | --- | --- |
-| `core/` | Rust library (`dc-client`) | The PC's identity, pairing window, trust store and connection handling. No UI, no Windows APIs. |
+| `core/` | Rust library (`dc-client`) | The PC's identity, pairing window, trust stores and connection handling. No UI, and one Windows API call site (the Credential Manager). |
 | `src-tauri/` | Tauri 2 app | Shell and React/TypeScript UI. **Phase 3b; not in the repository yet.** |
 
 `core` is deliberately not a Tauri module. Keeping the connection handling in a
 plain library means it builds and tests with nothing but `cargo test`, and the
-shell is left with the two jobs only a shell can do: asking Windows for facts
-(the adapter to advertise, the real OS version, the Credential Manager) and
-asking the user.
+shell is left with the two jobs only a shell can do: asking Windows for the facts
+a window needs (the adapter to advertise, the real OS version) and asking the
+user. The one Windows API that is not a UI concern - the Credential Manager, where
+the long-term key lives - is inside `core`, so the key never has to pass through
+JavaScript to be stored.
 
 ---
 
@@ -37,6 +39,7 @@ windows-app/
     src/identity.rs     X25519 key pair; the device id is derived from the key
     src/pairing.rs      One pairing window: QR payload, nonce, prologue, expiry
     src/store.rs        SecretStore trait + FileSecretStore, atomic writes
+    src/credman.rs      The PC key in the Windows Credential Manager (cfg(windows))
     src/trust.rs        TrustStore trait + the JSON list of pinned phones
     src/session.rs      Listener, accept(), PendingSession, ActiveSession
     src/hex.rs          Lowercase hex, for ids
@@ -68,6 +71,11 @@ string in the core would put a wrong claim on the wire (see `identity.rs`).
 - **Session.** `Listener` -> `accept()` -> `PendingSession` -> `confirm()` ->
   `ActiveSession`, with the `hello` exchange, the confirmation code, request
   replies and `security.unpair` in both directions.
+- **Secrets.** The long-term key goes through `default_secret_store()`, which on
+  Windows is the per-user Credential Manager - the key is never a file. That
+  hides it from backups and from a second account on the machine, not from
+  another program running as the same user; `docs/windows.md` says exactly what
+  it does and does not stop.
 
 Details, status and open gaps: **`docs/windows.md`**.
 

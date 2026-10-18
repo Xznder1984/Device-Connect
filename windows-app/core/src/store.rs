@@ -54,7 +54,13 @@ pub(crate) fn write_atomic(path: &Path, bytes: &[u8]) -> Result<(), StoreError> 
     })
 }
 
-/// A named secret, kept somewhere the user's other programs cannot read it.
+/// A named secret, kept in one place per platform.
+///
+/// The promise is only "in the same place every run, and not in a file beside
+/// the working data". What each implementation actually stops is documented on
+/// the implementation: none of them is a boundary between programs, because any
+/// program running as the same user can read the same store. See
+/// [`default_secret_store`] for the one this build uses.
 pub trait SecretStore: Send + Sync {
     /// The secret stored under `name`, or `None` if there is none yet.
     fn load(&self, name: &str) -> Result<Option<Vec<u8>>, StoreError>;
@@ -64,6 +70,46 @@ pub trait SecretStore: Send + Sync {
 
     /// Forget `name`. Succeeds when there was nothing stored.
     fn delete(&self, name: &str) -> Result<(), StoreError>;
+}
+
+/// The store this build uses for the long-term key.
+///
+/// Windows uses the per-user Credential Manager ([`crate::credman`]): the key is
+/// encrypted at rest with the user's DPAPI keys and never exists as a file that
+/// a backup, a sync client or a `dir /s` can reach. All of that, and what it
+/// still does not protect against, is in that module's documentation.
+#[cfg(windows)]
+pub fn default_secret_store() -> Result<Box<dyn SecretStore>, StoreError> {
+    Ok(Box::new(crate::credman::CredManSecretStore::new()))
+}
+
+/// The store this build uses for the long-term key: a file under
+/// [`FileSecretStore::default_dir`], on platforms without the Credential
+/// Manager.
+///
+/// On Windows the Credential Manager is used instead; see the Windows
+/// definition of this function.
+#[cfg(not(windows))]
+pub fn default_secret_store() -> Result<Box<dyn SecretStore>, StoreError> {
+    Ok(Box::new(FileSecretStore::new(
+        FileSecretStore::default_dir()?,
+    )))
+}
+
+/// Where [`default_secret_store`] keeps the key, named for the user.
+///
+/// The UI has to be able to say where the key lives; guessing, or saying
+/// "securely stored", would be worse than saying nothing.
+#[cfg(windows)]
+pub fn default_store_name() -> &'static str {
+    "Windows Credential Manager"
+}
+
+/// Where [`default_secret_store`] keeps the key, for platforms without the
+/// Credential Manager. See the Windows definition of this function.
+#[cfg(not(windows))]
+pub fn default_store_name() -> &'static str {
+    "file in the app data directory"
 }
 
 /// Secrets as files in one directory.

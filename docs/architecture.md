@@ -103,11 +103,11 @@ transport is live.
    long-term static public keys. The user confirms on both devices. This stops
    a man in the middle on the local network.
 4. Each side stores the peer's static public key (Android Keystore on the
-   phone; on the PC a file store for now - Windows Credential Manager is
-   Phase 3b, see `docs/windows.md`). Future connections authenticate against
-   these pinned keys and skip the QR. Note that v1 keeps the full Noise XX
-   handshake on reconnect; it only skips the QR step, not the handshake, so
-   there is no shortened pattern to get wrong.
+   phone; the per-user Windows Credential Manager on the PC, so the key is never
+   a file). Future connections authenticate against these pinned keys and skip
+   the QR. Note that v1 keeps the full Noise XX handshake on reconnect; it only
+   skips the QR step, not the handshake, so there is no shortened pattern to get
+   wrong.
 
 **Why Noise instead of TLS 1.3:** TLS needs certificates. Self-signed X.509
 generation and lifecycle on Android is fragile (BouncyCastle is a hidden API
@@ -142,7 +142,7 @@ message text, contacts, keys or tokens.
 |---|---|---|
 | Other devices on the same LAN/Wi-Fi | Noise XX with pinned keys; unpaired clients are refused before any data flows | None known for the protocol itself |
 | Active MITM during first pairing | QR one-time nonce + 6-digit code confirmed on both screens | Shoulder-surfing the QR within its 2-minute life |
-| Malware on the PC or phone | OS sandbox; the phone's key is Keystore-sealed | A compromised OS can read the screen; out of scope. The PC key is a plain file under the user profile until Phase 3b |
+| Malware on the PC or phone | OS sandbox; the phone's key is Keystore-sealed, the PC's is in the Credential Manager | A compromised OS can read the screen; out of scope. Neither store separates programs running as the same user |
 | Thief of the phone | Unpair + remote wipe commands from the PC; keys non-exportable | Device unlocked before remote unpair arrives |
 | Over-curious MCP/AI client | Phone-side confirmation for sensitive actions, per-capability toggles, user can disable confirmations | User who disables all confirmations trusts their AI client fully |
 | Network attacker flooding handshakes | Designed: per-IP token bucket + exponential lockout, shown in the UI. **Not implemented** (see 6) | DoS of the pairing screen for the lockout window; today an attacker can force unlimited handshakes |
@@ -201,10 +201,12 @@ message bodies, contact names, keys or tokens.
   phone and never initiates a session. This is deliberate (one dial direction,
   one place to get wrong), not an oversight, and the protocol allows the
   opposite direction without a version change.
-- **Windows: the PC key is a plain file, not in Credential Manager.** `dc-client`
-  ships a `FileSecretStore` behind a `SecretStore` trait; the Credential Manager
-  implementation is Phase 3b. Until then the key inherits only the ACLs of the
-  user's profile directory. `docs/windows.md` has the detail.
+- **The PC key is in the Credential Manager, which is not a sandbox.** The key is
+  encrypted at rest with the user's DPAPI keys and is not a file a backup or a
+  sync client can reach, which is a real improvement over the `FileSecretStore`
+  the library still uses for headless runs. It does not separate programs: any
+  process running as the same user can read the same entry. `docs/windows.md` has
+  the detail.
 - **Windows: no handshake rate limit yet.** The per-IP token bucket and lockout
   in section 4.1 are designed but not implemented, so anything on the network can
   make the PC run handshakes as fast as it can send them.
