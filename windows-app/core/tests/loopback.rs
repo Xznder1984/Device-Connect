@@ -6,16 +6,17 @@
 //! agrees with itself; written against the shared codec instead, they check the
 //! bytes that would cross a real network between this PC and a real phone.
 
-use std::net::{SocketAddr, TcpStream};
+use std::io::Read;
+use std::net::{IpAddr, SocketAddr, TcpStream};
 use std::sync::Arc;
 use std::thread::{self, JoinHandle};
 use std::time::Duration;
 
 use dc_client::pairing::{confirmation_code, PairingOffer};
-use dc_client::session::{accept, Listener, SessionConfig, SessionError};
+use dc_client::session::{accept, Arrival, Listener, PendingSession, SessionConfig, SessionError};
 use dc_client::store::FileSecretStore;
 use dc_client::trust::{FileTrustStore, TrustStore};
-use dc_client::{ActiveSession, HostInfo, Identity};
+use dc_client::{ActiveSession, HostInfo, Identity, Limits, RateLimit, Refusal};
 use dc_protocol::error_codes::ErrorCode;
 use dc_protocol::framing::{mtype, Channel, Frame};
 use dc_protocol::records::{handshake_over_stream, Role, SecureTransport, WireStream};
@@ -191,6 +192,11 @@ struct Harness {
 
 impl Harness {
     fn new() -> Self {
+        Self::with_limit(Arc::new(RateLimit::new()))
+    }
+
+    /// A harness whose listener shares `limit`, for the tests that watch it.
+    fn with_limit(limit: Arc<RateLimit>) -> Self {
         let key_dir = tempfile::tempdir().expect("temp dir");
         let trust_dir = tempfile::tempdir().expect("temp dir");
         let identity =
@@ -198,7 +204,7 @@ impl Harness {
         let trust: Arc<dyn TrustStore> =
             Arc::new(FileTrustStore::new(trust_dir.path().join("trusted.json")));
         Self {
-            listener: Listener::bind(0).expect("bind"),
+            listener: Listener::with_limit(0, limit).expect("bind"),
             identity,
             trust,
             _dirs: (key_dir, trust_dir),
@@ -213,14 +219,29 @@ impl Harness {
         SessionConfig::new(self.identity.clone(), host(), Arc::clone(&self.trust)).with_offer(offer)
     }
 
+    /// Take up one connection, failing the test if the listener refused it.
+    ///
+    /// The rate limit has its own tests below; a refusal in any other test would
+    /// mean it dialled more often than the limit allows, which is a test bug
+    /// worth failing on rather than waiting out.
+    fn accept(&self, config: SessionConfig) -> Result<PendingSession, SessionError> {
+        let (stream, admitted) = match self.listener.accept().expect("accept") {
+            Arrival::Connected { stream, admitted } => (stream, admitted),
+            Arrival::Refused { peer, reason } => panic!("refused {peer}: {reason}"),
+        };
+        accept(stream, config, admitted)
+    }
+
+    /// The handshake and hello exchange for a phone that has just connected.
+    fn pending(&self, offer: &PairingOffer) -> PendingSession {
+        self.accept(self.config(offer))
+            .expect("handshake and hello")
+    }
+
     /// Accept the connection, run the handshake and the hello exchange, and
     /// confirm the pairing, as the app does once the user agrees.
     fn pair_and_confirm(&self, offer: &PairingOffer) -> ActiveSession {
-        let stream = self.listener.accept().expect("the phone connected");
-        accept(stream, self.config(offer))
-            .expect("handshake and hello")
-            .confirm()
-            .expect("confirm")
+        self.pending(offer).confirm().expect("confirm")
     }
 
     /// A window whose `port` is the port actually bound.
@@ -300,8 +321,7 @@ fn a_new_phone_must_be_confirmed_and_the_code_comes_from_both_keys() {
         (ack, phone.peer)
     });
 
-    let stream = pc.listener.accept().expect("connected");
-    let pending = accept(stream, pc.config(&offer)).expect("handshake and hello");
+    let pending = pc.pending(&offer);
 
     // The handshake proved which key is on the other end, and the PC derived the
     // code from that key plus its own: the two screens show the same digits.
@@ -401,8 +421,7 @@ fn the_pinned_key_is_remembered_and_the_phone_reconnects_without_asking_again() 
         ack
     });
 
-    let stream = pc.listener.accept().unwrap();
-    let pending = accept(stream, pc.config(&offer)).expect("accepted");
+    let pending = pc.pending(&offer);
     assert!(pending.already_paired());
     pending.confirm().expect("confirm").close();
     assert!(
@@ -426,8 +445,7 @@ fn an_unconfirmed_phone_leaves_nothing_behind() {
         phone.recv_request().is_none()
     });
 
-    let stream = pc.listener.accept().unwrap();
-    let pending = accept(stream, pc.config(&offer)).expect("accepted");
+    let pending = pc.pending(&offer);
     assert!(!pending.already_paired());
     pending.reject();
 
@@ -452,8 +470,8 @@ fn a_missing_reply_ends_the_session_instead_of_hanging_forever() {
     let config = pc
         .config(&offer)
         .with_reply_timeout(Duration::from_millis(150));
-    let stream = pc.listener.accept().unwrap();
-    let mut session = accept(stream, config)
+    let mut session = pc
+        .accept(config)
         .expect("handshake")
         .confirm()
         .expect("confirm");
@@ -485,8 +503,7 @@ fn a_phone_speaking_another_version_is_told_why_and_dropped() {
         phone.expect_json()
     });
 
-    let stream = pc.listener.accept().unwrap();
-    match accept(stream, pc.config(&offer)) {
+    match pc.accept(pc.config(&offer)) {
         Err(SessionError::ProtocolMismatch { peer, ours }) => {
             assert_eq!(peer, 2);
             assert_eq!(ours, 1);
@@ -590,4 +607,160 @@ fn an_unknown_command_from_the_phone_is_refused_without_ending_the_session() {
         .as_str()
         .unwrap()
         .contains("not.a.command"));
+}
+
+// ---------------------------------------------------------------- rate limit --
+
+/// A raw socket, for the tests where the phone must *not* get as far as a
+/// handshake: a refused connection is closed before any byte is exchanged, so a
+/// real `Phone` here would only be a thread stuck in `dial`.
+fn connect(addr: SocketAddr) -> TcpStream {
+    let stream = TcpStream::connect(addr).expect("the PC is listening");
+    stream
+        .set_read_timeout(Some(Duration::from_secs(10)))
+        .expect("read timeout");
+    stream
+}
+
+#[test]
+fn an_address_over_its_attempt_budget_is_refused_before_the_handshake() {
+    // One attempt a minute, so the second connection from this address is over
+    // the limit without anybody having to wait.
+    let limit = Arc::new(RateLimit::with_limits(Limits {
+        attempts_per_ip_per_minute: 1,
+        ..Limits::default()
+    }));
+    let pc = Harness::with_limit(Arc::clone(&limit));
+
+    let first = connect(pc.addr());
+    match pc.listener.accept().expect("accept") {
+        Arrival::Connected { stream, admitted } => {
+            assert_eq!(admitted.ip(), first.local_addr().unwrap().ip());
+            drop(stream);
+        }
+        Arrival::Refused { reason, .. } => panic!("the first connection was refused: {reason}"),
+    }
+
+    let mut second = connect(pc.addr());
+    match pc.listener.accept().expect("accept") {
+        Arrival::Refused { reason, .. } => assert_eq!(reason, Refusal::RateLimited),
+        Arrival::Connected { .. } => panic!("the second connection should have been refused"),
+    }
+
+    // Refused means closed: the phone is not left waiting for a handshake that
+    // is never coming, and a read sees the end of the stream rather than timing
+    // out.
+    let mut byte = [0u8; 1];
+    assert_eq!(
+        second
+            .read(&mut byte)
+            .expect("a refused socket reads as closed"),
+        0
+    );
+
+    // The budget is per address, so a second address is not punished for the
+    // first one's attempts.
+    let other = RateLimit::new();
+    assert!(other.admit(IpAddr::from([192, 168, 1, 7])).is_ok());
+    assert!(
+        limit.lock_remaining().is_none(),
+        "one address over its budget is not the lockout"
+    );
+}
+
+#[test]
+fn six_unattended_hellos_lock_the_listener_for_every_address() {
+    let pc = Harness::new();
+    let offer = pc.offer();
+
+    // Six strangers, each one a real handshake and a real hello, each one turned
+    // away without a pairing. Five is what the spec allows; the sixth is a
+    // violation.
+    for hello in 1..=6 {
+        let phone = spawn_phone(pc.addr(), None, phone_secret(), |phone| {
+            phone.send_hello();
+            let ack = phone.read_ack();
+            let _ = phone.recv_request();
+            ack.paired
+        });
+        pc.pending(&offer).reject();
+        assert!(
+            !phone.join().expect("phone thread"),
+            "hello {hello} is not paired"
+        );
+        if hello < 6 {
+            assert!(
+                pc.listener.rate_limit().lock_remaining().is_none(),
+                "hello {hello} is one of the five that are allowed"
+            );
+        }
+    }
+
+    let remaining = pc
+        .listener
+        .rate_limit()
+        .lock_remaining()
+        .expect("the sixth unattended hello locks the listener");
+    assert!(remaining <= Duration::from_secs(300));
+
+    // Locked means locked for everyone, not just for the address that did it:
+    // the next phone - a different key, the same 127.0.0.1 - is refused without
+    // a handshake.
+    let mut next = connect(pc.addr());
+    match pc.listener.accept().expect("accept") {
+        Arrival::Refused {
+            reason: Refusal::LockedOut { .. },
+            ..
+        } => {}
+        Arrival::Refused { reason, .. } => panic!("expected the lockout, got {reason}"),
+        Arrival::Connected { .. } => panic!("a locked listener admitted a connection"),
+    }
+    let mut byte = [0u8; 1];
+    assert_eq!(next.read(&mut byte).expect("closed"), 0);
+}
+
+#[test]
+fn a_completed_pairing_clears_the_run_of_unattended_hellos() {
+    let pc = Harness::new();
+    let offer = pc.offer();
+
+    // Four strangers say hello and are turned away: one short of a violation.
+    for _ in 0..4 {
+        let phone = spawn_phone(pc.addr(), None, phone_secret(), |phone| {
+            phone.send_hello();
+            let _ = phone.read_ack();
+            phone.recv_request().is_none()
+        });
+        pc.pending(&offer).reject();
+        assert!(phone.join().expect("phone thread"), "turned away");
+    }
+    assert!(pc.listener.rate_limit().lock_remaining().is_none());
+
+    // Then one user confirms a code. The phone is not a stranger any more, so
+    // its own run of hellos is forgotten - including the four above, which came
+    // from the same address.
+    let phone = spawn_phone(pc.addr(), None, phone_secret(), |phone| {
+        phone.send_hello();
+        let ack = phone.read_ack();
+        let _ = phone.recv_request();
+        ack.paired
+    });
+    pc.pair_and_confirm(&offer).close();
+    assert!(!phone.join().expect("phone thread"));
+
+    // Two more strangers are two, not six: the count started again after the
+    // pairing, and nothing is locked.
+    for _ in 0..2 {
+        let phone = spawn_phone(pc.addr(), None, phone_secret(), |phone| {
+            phone.send_hello();
+            let _ = phone.read_ack();
+            phone.recv_request().is_none()
+        });
+        pc.pending(&offer).reject();
+        assert!(phone.join().expect("phone thread"), "turned away");
+    }
+    assert!(
+        pc.listener.rate_limit().lock_remaining().is_none(),
+        "a pairing wiped the earlier hellos rather than counting them"
+    );
 }

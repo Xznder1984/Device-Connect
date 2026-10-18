@@ -55,6 +55,13 @@ handshake, so a wrong prologue on either side aborts immediately. There is no
 custom cryptography anywhere: `:protocol` uses the MIT-licensed
 `rweather/noise-java` library (vendored, see `THIRD-PARTY-NOTICES.md`).
 
+A dial does not always reach a handshake. Protocol section 3 has the PC refuse a
+connection before the handshake when the source address is over its attempt
+budget or while its listener is locked, and there is no frame for that: the
+socket simply closes. On this side that is indistinguishable from a PC that is
+not listening at all, and telling the user which one it was is Pending (see
+Status).
+
 ### Why the phone does not listen
 
 Supporting inbound connections would mean holding a listening socket open, which
@@ -267,3 +274,4 @@ run; end-to-end verification against a live PC is Phase 4.
 | Screen capture (MediaProjection + H.264) | Pending |
 | Input control (Accessibility) | Pending |
 | Notification listener, SMS, files | Pending |
+| Warning that the PC has locked its listener (protocol section 3) | Pending: a locked PC refuses before the handshake, so the phone sees only a closed socket and has nothing to show on screen |

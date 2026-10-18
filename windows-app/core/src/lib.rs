@@ -22,6 +22,7 @@
 
 pub mod hex;
 pub mod identity;
+pub mod limit;
 pub mod pairing;
 pub mod session;
 pub mod store;
@@ -31,10 +32,11 @@ pub mod trust;
 pub mod credman;
 
 pub use identity::{HostInfo, Identity};
+pub use limit::{Admitted, Limits, RateLimit, Refusal};
 pub use pairing::PairingOffer;
 pub use session::{
-    accept, local_address, ActiveSession, Listener, PendingSession, SessionConfig, SessionError,
-    SessionInfo,
+    accept, local_address, ActiveSession, Arrival, Listener, PendingSession, SessionConfig,
+    SessionError, SessionInfo,
 };
 pub use store::{
     default_secret_store, default_store_name, FileSecretStore, SecretStore, StoreError,

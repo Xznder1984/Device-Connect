@@ -14,7 +14,7 @@ marked Implemented has been compiled and run on Windows.
 
 | Area | State |
 | --- | --- |
-| `dc-client`: 27 unit tests + 9 end-to-end tests over a real loopback socket | Implemented, `cargo test` green |
+| `dc-client`: 38 unit tests + 12 end-to-end tests over a real loopback socket | Implemented, `cargo test` green |
 | PC identity: X25519 key, id derived from the key (never chosen) | Implemented |
 | Pairing window: QR payload, fresh nonce, expiry, manual-mode address | Implemented |
 | Noise XX as responder, `hello`/`hello_ack`, version refusal | Implemented |
@@ -26,7 +26,7 @@ marked Implemented has been compiled and run on Windows.
 | Session listener + QR pairing listener + mDNS advertisement | Pending (Phase 3b; see "The prologue fixes the mode") |
 | Tauri shell and React UI | Pending |
 | Heartbeat / dead-link detection (`ping`/`pong`) | Pending on both sides; the reply timeout is the only detection today |
-| Listener rate limit and lockout (section 3.4) | Pending |
+| Listener rate limit and lockout (section 3) | Implemented, PC-side: per-address attempt bucket, listener-wide lockout. Nothing tells the phone why it was refused - see "Rate limit and lockout" |
 | Windows Credential Manager for the long-term key | Implemented (`CredManSecretStore`; the file store stays for headless runs and tests) |
 | Windows Firewall allowance | Not yet exercised; the shell will be the first thing that binds a listener |
 
@@ -91,9 +91,13 @@ app's business, and closing the listener is what actually ends it.
 ### Consent, in order
 
 ```text
-TcpStream --accept()--> PendingSession --confirm()--> ActiveSession
-                                    \--reject()---> closed, nothing stored
+TcpStream --Listener::accept()--> Arrival::Connected --accept()--> PendingSession --confirm()--> ActiveSession
+                              \-> Arrival::Refused --------------------------> closed, nothing read
+                                                                PendingSession --reject()--> closed, nothing stored
 ```
+
+The refusal path is section 3's rate limit and lockout, decided before a byte is
+decrypted; see "Rate limit and lockout" below.
 
 1. Handshake and `hello`. A `pv` this build does not speak gets an unsolicited
    `UNSUPPORTED` error frame and then the connection is dropped, before any other
@@ -142,6 +146,69 @@ therefore always goes through `wire.reader`, and the test phone in
 Treating a timed-out read as terminal follows from the same place: the read may
 have consumed part of a record, so a retry would splice two records together.
 `SessionError::Timeout` means the caller must drop the session, not retry it.
+
+---
+
+## Rate limit and lockout
+
+A listener answers whoever can reach the port, and a Noise handshake is real
+work, so protocol section 3 bounds two things: how fast one source address may
+start handshakes, and how many `hello`s one address may send without ever
+finishing a pairing. `core/src/limit.rs` is the whole of it, and
+`Listener::accept()` is the only door into a session.
+
+| What | Number | Origin |
+| --- | --- | --- |
+| Handshake attempts, per source address | 10 a minute, token bucket, refilled continuously | Spec |
+| Unattended `hello`s tolerated, per source address | 5 within 10 minutes | Spec |
+| Lock, once an address goes over | 5 minutes, doubling per further violation | Spec |
+| Where the doubling stops | 1 hour | Not the spec; see below |
+
+`Listener::accept()` returns an `Arrival` rather than a socket, because both
+outcomes are normal. `Arrival::Connected` carries the socket and the admission
+that `accept(stream, config, admitted)` then needs; `Arrival::Refused` carries
+the peer and the reason, which is what the shell shows while it keeps looping.
+Nothing is read from a refused connection: it is closed immediately, so the
+cheapest thing an attacker can do is also the cheapest thing the PC does.
+
+The price of deciding this early is that a refused connection cannot be told
+why. There is no encrypted channel yet, and section 2 has no cleartext error
+frame, so the PC closes the socket and the phone sees a closed socket. That also
+means the "warning notification while locked" the spec asks the phone to show is
+**not implemented** - nothing on the wire carries it - and it is listed as such
+in `docs/android.md` rather than quietly assumed.
+
+Four choices are worth naming, because none of them is written in the spec:
+
+- **The lock is listener-wide.** The spec says the lock is on the listener, and
+  that is what this is: not a block on the offending address, which an attacker
+  able to present a second address would walk around. The price is availability,
+  and it is a real price: while a lock is up, an already-pinned phone is refused
+  along with everyone else, and an attacker who keeps completing handshakes can
+  keep taking the lock again. That is the deliberate side of the trade - the
+  alternative is a PC that will run a handshake for anyone at any rate - and the
+  ceiling is what stops it being permanent.
+- **The doubling has a ceiling.** "Doubling per further violation" with no
+  end is not a duration a clock can hold, so the doubling stops at an hour:
+  violations one to four give 5, 10, 20 and 40 minutes, and everything after
+  that gives an hour. It is also the point at which the user gets their own PC
+  back, so the ceiling does two jobs.
+- **Violations accumulate for the run of the process.** The spec does not say
+  when a violation stops counting as one; here it does not, which is why the
+  ceiling above matters. Restarting the app starts the count again.
+- **Everything is keyed on the source address**, because before the handshake
+  the source address is the only fact about the peer that exists. Two phones
+  behind one NAT therefore share one budget and one count, and an attacker on an
+  IPv6 /64 can spend addresses. It is what the spec asks for; it is a wall, not a
+  lock.
+
+The address table is capped at 1024 entries: past that, the quietest entry is
+forgotten, which costs at most one bucket and keeps a network full of strangers
+from growing into a memory leak. Attempts are counted in thousandths so that the
+one attempt a sixth of a minute buys is exactly one, not 0.9999 of one.
+
+Both listeners should share one limiter, and `Listener::with_limit(port, limit)`
+is how: an attacker does not care which of the PC's sockets answers.
 
 ---
 
@@ -200,7 +267,9 @@ Two kinds:
   the pairing window's nonce and prologue, store-name sanitising, and for the
   vault: round trip, replace, delete (twice), the 2560-byte boundary on both
   sides, a name that cannot be represented, and that the default store really is
-  the Credential Manager.
+  the Credential Manager. The limiter is tested against a supplied clock, which
+  is the only way to reach a five-minute lockout, a doubling and a ceiling
+  without waiting for any of them.
 - **`windows-app/core/tests/loopback.rs`**: both sides of a real TCP connection
   on 127.0.0.1, with a phone written directly against `dc-protocol` rather than
   out of `dc-client` helpers. Sharing the session code would only prove that the
@@ -209,7 +278,7 @@ Two kinds:
   without `dc-client`, so "the PC saw the right key" is checked across two paths
   through the same curve rather than inside one.
 
-The nine end-to-end cases:
+The twelve end-to-end cases:
 
 1. a new phone is offered a code and is pinned only by `confirm()`;
 2. a disabled capability comes back as a refusal, and the session stays usable;
@@ -219,7 +288,13 @@ The nine end-to-end cases:
 6. a `pv` mismatch gets `UNSUPPORTED` plus `ProtocolMismatch`;
 7. unpair from the PC deletes the key and closes;
 8. unpair from the phone is acted on before it is answered;
-9. an unknown command is refused while the pending request still gets its answer.
+9. an unknown command is refused while the pending request still gets its answer;
+10. an address over its attempt budget is refused, and the socket is closed
+    rather than left waiting - the whole phone side of that case is a TCP connect;
+11. six unattended `hello`s lock the listener, and the next phone is refused
+    without a handshake;
+12. a confirmed pairing wipes the run of unattended `hello`s, so a pairing does
+    not count towards a lockout.
 
 What these do **not** cover: the Android app itself. The phone here is a test
 double that speaks the same implementation and the same golden vectors, which is
@@ -231,11 +306,12 @@ why it is worth having, but a run against a live device is Phase 4.
 
 Each of these is a real gap, not a stub with a friendly name:
 
-1. **Listener rate limit and lockout.** Section 3.4 asks for a token bucket of 10
-   handshake attempts per minute per IP, and for locking out a peer that reaches
-   `hello` more than 5 times in 10 minutes without completing a pairing. Neither
-   exists, so anything on the network can make this PC run handshakes as fast as
-   it can send them. That matters on a network the user does not control.
+1. **Nothing tells the phone it was refused.** Section 3 has the PC show a
+   countdown and the phone show a warning notification while locked. The PC side
+   knows (`RateLimit::lock_remaining`, `Refusal::LockedOut`); the phone side is
+   not built, and cannot be from the PC alone: a locked listener refuses before
+   the handshake, so there is no encrypted channel to say it on, and section 2
+   has no cleartext error frame. It is listed in `docs/android.md` too.
 2. **Heartbeat.** `ping`/`pong` on channel `0x09` is not implemented on either
    side, so a link that dies without a FIN is only noticed when a request next
    times out.

@@ -27,7 +27,7 @@ claimed to work anywhere in this repository.
 | --- | --- |
 | `protocol/` | **Implemented, tested.** Framing, the record layer, QR pairing payloads (nonce + expiry), six-digit confirmation codes, the Noise XX known-answer test, JSON Schemas and the golden vectors, with conformance suites in Rust and TypeScript here and a Kotlin/JVM one in `android-app/protocol/`, all reading the same vectors. |
 | `android-app/` | Implemented through Phase 2c: `:protocol` (46 tests) and the app - pairing by QR, by typed `ip:port` or by mDNS, device identity sealed in the Keystore, the peer trust store, the foreground service, the consent screen and the clipboard capability. Screen capture, input injection, notifications, SMS, calls, contacts and files are **Pending**. |
-| `windows-app/` | Phase 3a + 3b in part: `dc-client`, the responder core - identity whose key lives in the per-user **Windows Credential Manager**, pairing window, trust store, and the session (27 unit + 9 end-to-end tests, all green). The Tauri shell and the React UI are **Pending** (Phase 3b), as are the handshake rate limit and the heartbeat. |
+| `windows-app/` | Phase 3a + 3b in part: `dc-client`, the responder core - identity whose key lives in the per-user **Windows Credential Manager**, pairing window, trust store, the session, and section 3's rate limit and lockout (38 unit + 12 end-to-end tests, all green). The Tauri shell and the React UI are **Pending** (Phase 3b), as is the heartbeat. |
 | `mcp-server/` | **Not started.** |
 | `website/` | **Not started.** |
 
@@ -81,7 +81,7 @@ Windows:
 
 ```powershell
 Set-Location windows-app
-cargo test          # 27 unit tests + 9 tests over a real loopback socket
+cargo test          # 38 unit tests + 12 tests over a real loopback socket
 ```
 
 On a machine with little space on `C:`, point the caches elsewhere first:
@@ -104,15 +104,20 @@ The short version, because it is the reason the project exists:
 - **No custom cryptography.** Noise XX over X25519 / ChaChaPoly / SHA256, with
   the implementations (`snow` in Rust, a vendored MIT Java implementation on
   Android) chosen rather than written here.
+- **Abuse is throttled, and the throttle is described honestly.** The PC's
+  listener refuses a connection before the handshake when one source address
+  starts too many, and locks itself when one address keeps sending unattended
+  `hello`s. The lock is a denial of service of its own - it refuses the user's
+  own phone too - which is written down rather than glossed over.
 - **Keys go to the platform store.** The phone's key is sealed in the Android
   Keystore; the PC's is an entry in the per-user Windows Credential Manager, not
   a file. Neither store separates programs running as the same user, and neither
   is described as if it did.
 
-What is *not* protected yet is listed with the rest: the per-IP handshake rate
-limit is designed but not implemented, and the PC has no heartbeat. Both are in
-`docs/windows.md` and in `docs/architecture.md` section 6, which is the honest
-list of limitations.
+What is *not* protected yet is listed with the rest: the PC has no heartbeat, and
+nothing tells the phone when its connection was refused by the rate limit, so no
+warning can be shown on it. Both are in `docs/windows.md`, `docs/android.md` and
+`docs/architecture.md` section 6, which is the honest list of limitations.
 
 ## License
 

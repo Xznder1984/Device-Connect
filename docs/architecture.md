@@ -145,7 +145,7 @@ message text, contacts, keys or tokens.
 | Malware on the PC or phone | OS sandbox; the phone's key is Keystore-sealed, the PC's is in the Credential Manager | A compromised OS can read the screen; out of scope. Neither store separates programs running as the same user |
 | Thief of the phone | Unpair + remote wipe commands from the PC; keys non-exportable | Device unlocked before remote unpair arrives |
 | Over-curious MCP/AI client | Phone-side confirmation for sensitive actions, per-capability toggles, user can disable confirmations | User who disables all confirmations trusts their AI client fully |
-| Network attacker flooding handshakes | Designed: per-IP token bucket + exponential lockout, shown in the UI. **Not implemented** (see 6) | DoS of the pairing screen for the lockout window; today an attacker can force unlimited handshakes |
+| Network attacker flooding handshakes | Per-IP token bucket, plus a listener-wide lockout when one address sends too many unattended `hello`s, both refused before the handshake. Implemented on the PC (`windows-app/core/src/limit.rs`) | The lock is a DoS of its own: while it is up, a pinned phone is refused too, and an attacker who keeps sending can keep taking it. Each lock stops growing at one hour, which is a ceiling the spec does not ask for (see 6) |
 
 ### 4.2 Explicit non-goals
 
@@ -207,9 +207,18 @@ message bodies, contact names, keys or tokens.
   the library still uses for headless runs. It does not separate programs: any
   process running as the same user can read the same entry. `docs/windows.md` has
   the detail.
-- **Windows: no handshake rate limit yet.** The per-IP token bucket and lockout
-  in section 4.1 are designed but not implemented, so anything on the network can
-  make the PC run handshakes as fast as it can send them.
+- **The handshake lockout is a denial of service in its own right.** A per-address
+  attempt bucket and a listener-wide lockout are implemented on the PC, so an
+  attacker cannot make it run handshakes without limit. The trade is that the lock
+  refuses *everyone*, including a phone that is already pinned, and an attacker
+  who keeps sending can keep re-taking it. Each lock stops growing at one hour,
+  which is a ceiling the spec does not ask for: without one, the doubling is not a
+  duration a clock can hold and an attacker could hold the PC closed indefinitely.
+- **Nothing tells the phone it was locked out.** The refusal happens before the
+  handshake, so there is no encrypted channel for the reason, and section 2 has
+  no cleartext error frame; the PC closes the socket, and the phone-side warning
+  notification the spec asks for is not implemented. `docs/windows.md` and
+  `docs/android.md` both say so.
 - **Windows: no mDNS advertisement yet.** The phone can browse for
   `_deviceconnect._tcp`; the PC does not announce it until the Phase 3b shell
   exists, so pairing today is a typed `ip:port` or a QR.

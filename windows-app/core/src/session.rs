@@ -13,10 +13,16 @@
 //! but it will not answer a single request. [`PendingSession::confirm`] is what
 //! records the decision to trust that key, and only the user can make it, after
 //! comparing the six-digit code on both screens (section 3).
+//!
+//! Before any of that, [`Listener::accept`] decides whether the connection is
+//! even worth a handshake: section 3's per-address attempt budget and its
+//! lockout for repeated unattended `hello`s. A refused connection is closed
+//! without reading a byte of it, so [`Arrival`] - not a bare `TcpStream` - is
+//! what a listener hands over.
 
 use std::collections::HashMap;
 use std::io;
-use std::net::{IpAddr, TcpListener, TcpStream, UdpSocket};
+use std::net::{IpAddr, SocketAddr, TcpListener, TcpStream, UdpSocket};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -30,6 +36,7 @@ use dc_protocol::schema::{
 use serde_json::{json, Value};
 
 use crate::identity::{device_id, HostInfo, Identity};
+use crate::limit::{Admitted, RateLimit, Refusal};
 use crate::pairing::{confirmation_code, PairingOffer};
 use crate::store::StoreError;
 use crate::trust::{Peer, TrustStore};
@@ -83,21 +90,62 @@ pub fn local_address() -> Option<IpAddr> {
     Some(socket.local_addr().ok()?.ip())
 }
 
+/// What a listener got: either a connection worth handing to [`accept`], or one
+/// it refused before reading a byte of it.
+///
+/// A refusal is not an error. It is the steady state of a listener under
+/// attack, and a caller has to keep going either way, which is why it comes back
+/// as a value with the reason rather than as a [`SessionError`].
+#[derive(Debug)]
+pub enum Arrival {
+    /// A connection that passed the rate limit. Run [`accept`] on it.
+    Connected {
+        /// The socket, untouched: nothing has been read from it yet.
+        stream: TcpStream,
+        /// The admission this listener granted, which [`accept`] needs and which
+        /// carries the address the limiter counts against.
+        admitted: Admitted,
+    },
+    /// A connection that was closed without a handshake. The phone sees the
+    /// socket close, which is all it can be told: there is no encrypted channel
+    /// yet and section 2 has no cleartext error frame.
+    Refused {
+        /// Who was refused.
+        peer: SocketAddr,
+        /// Which limit they hit, for the UI.
+        reason: Refusal,
+    },
+}
+
 /// The socket the phone dials into.
 ///
 /// The PC never connects out and never opens anything the user did not ask for:
 /// [`Listener::bind`] is called when a session listener is started, and the
 /// socket is closed as soon as the app stops listening.
+///
+/// Every listener carries a [`RateLimit`], and the app should give the same one
+/// to all of its listeners: the session listener and the pairing listener are
+/// two doors into the same PC and an attacker does not care which one answers.
 pub struct Listener {
     inner: TcpListener,
+    limit: Arc<RateLimit>,
 }
 
 impl Listener {
     /// Bind `port` on every interface. Port 0 asks the operating system for a
     /// free one, which is what the QR's `p` field should carry.
+    ///
+    /// The limiter is a fresh one; when the app opens a second listener for the
+    /// pairing window, build it with [`Listener::with_limit`] and the first
+    /// listener's [`Listener::rate_limit`] so both share one budget.
     pub fn bind(port: u16) -> Result<Self, SessionError> {
+        Self::with_limit(port, Arc::new(RateLimit::new()))
+    }
+
+    /// [`bind`](Self::bind) with a limiter the caller already has.
+    pub fn with_limit(port: u16, limit: Arc<RateLimit>) -> Result<Self, SessionError> {
         let inner = TcpListener::bind(("0.0.0.0", port))?;
-        Ok(Self { inner })
+        Ok(Self { inner, limit })
     }
 
     /// The port actually bound.
@@ -105,15 +153,36 @@ impl Listener {
         Ok(self.inner.local_addr()?.port())
     }
 
-    /// Wait for the next phone to connect.
+    /// This listener's limiter, for sharing and for reading the lockout
+    /// countdown the UI shows.
+    pub fn rate_limit(&self) -> &Arc<RateLimit> {
+        &self.limit
+    }
+
+    /// Wait for the next connection and decide whether it is worth a handshake.
+    ///
+    /// The check happens here, before a byte is read, so an over-limit
+    /// connection costs a socket and nothing else. A refused socket is shut down
+    /// rather than dropped where it stands: left in the accept queue it would
+    /// make the phone wait for a handshake that is never coming.
     ///
     /// The returned stream still has no read timeout: [`accept`] sets the
     /// handshake budget. Interactive traffic sets `TCP_NODELAY` so a request is
     /// not held back waiting for more bytes.
-    pub fn accept(&self) -> Result<TcpStream, SessionError> {
-        let (stream, _peer) = self.inner.accept()?;
+    pub fn accept(&self) -> Result<Arrival, SessionError> {
+        let (stream, peer) = self.inner.accept()?;
+
+        if let Err(reason) = self.limit.admit(peer.ip()) {
+            let _ = stream.shutdown(std::net::Shutdown::Both);
+            drop(stream);
+            return Ok(Arrival::Refused { peer, reason });
+        }
+
         stream.set_nodelay(true)?;
-        Ok(stream)
+        Ok(Arrival::Connected {
+            stream,
+            admitted: Admitted::new(Arc::clone(&self.limit), peer.ip()),
+        })
     }
 }
 
@@ -260,6 +329,9 @@ pub struct PendingSession {
     conn: Connection,
     info: SessionInfo,
     trust: Arc<dyn TrustStore>,
+    /// The admission this connection came in on, so a confirmed pairing can
+    /// report itself to the limiter that let the connection through.
+    admitted: Admitted,
 }
 
 impl PendingSession {
@@ -291,6 +363,9 @@ impl PendingSession {
                 crate::unix_now(),
             ))?;
             self.info.paired = true;
+            // A completed pairing is what tells the limiter this address is not
+            // a stranger, and clears the run of hellos that got it here.
+            self.admitted.note_paired();
         }
         Ok(ActiveSession {
             conn: self.conn,
@@ -475,14 +550,22 @@ impl ActiveSession {
     }
 }
 
-/// Take over a freshly accepted socket: Noise as the responder, then the hello
+/// Take over a freshly admitted socket: Noise as the responder, then the hello
 /// exchange.
 ///
 /// The phone dials, so the phone is the initiator and the PC is the responder
 /// (section 2.2). This returns as soon as `hello_ack` is on the wire, before any
 /// channel traffic, which is what section 3.4 requires: a code the user has not
 /// confirmed yet must not unlock anything.
-pub fn accept(stream: TcpStream, config: SessionConfig) -> Result<PendingSession, SessionError> {
+///
+/// `admitted` comes from [`Listener::accept`] and is not decoration: a `hello`
+/// from a key that is not pinned is reported through it, which is the count the
+/// listener-wide lockout is built on, and a confirmed pairing clears it.
+pub fn accept(
+    stream: TcpStream,
+    config: SessionConfig,
+    admitted: Admitted,
+) -> Result<PendingSession, SessionError> {
     // The handshake is the one phase a slow phone may legitimately still be in,
     // so it gets its own budget; the reply timeout takes over below. The budget
     // is set on the handle that reads, for the reason in `set_read_timeout`.
@@ -529,6 +612,15 @@ pub fn accept(stream: TcpStream, config: SessionConfig) -> Result<PendingSession
     conn.timeout = config.reply_timeout;
 
     let paired = config.trust.is_pinned(&peer_key)?;
+
+    // Section 3's failed-attempt count: a `hello` that is not a reconnection
+    // from a confirmed phone is an attempt, and enough of them from one address
+    // lock the listener. Done before the ack, because that is where the phone
+    // becomes visible as either a stranger or a known one.
+    if !paired {
+        admitted.note_unattended_hello();
+    }
+
     let channel = Channel::Control.id();
     let seq = conn.next_seq(channel);
     let ack = SessionHelloAck::new(
@@ -554,6 +646,7 @@ pub fn accept(stream: TcpStream, config: SessionConfig) -> Result<PendingSession
     Ok(PendingSession {
         conn,
         trust: config.trust,
+        admitted,
         info: SessionInfo {
             peer_key,
             peer_id: device_id(&peer_key),

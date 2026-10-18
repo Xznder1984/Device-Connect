@@ -41,6 +41,7 @@ windows-app/
     src/store.rs        SecretStore trait + FileSecretStore, atomic writes
     src/credman.rs      The PC key in the Windows Credential Manager (cfg(windows))
     src/trust.rs        TrustStore trait + the JSON list of pinned phones
+    src/limit.rs        Per-address attempt bucket and listener lockout (section 3)
     src/session.rs      Listener, accept(), PendingSession, ActiveSession
     src/hex.rs          Lowercase hex, for ids
     tests/loopback.rs   Both protocol ends over a real TCP socket
@@ -70,7 +71,13 @@ string in the core would put a wrong claim on the wire (see `identity.rs`).
   every phone at once.
 - **Session.** `Listener` -> `accept()` -> `PendingSession` -> `confirm()` ->
   `ActiveSession`, with the `hello` exchange, the confirmation code, request
-  replies and `security.unpair` in both directions.
+  replies and `security.unpair` in both directions. `accept()` returns an
+  `Arrival`, so a refused connection is a normal outcome rather than an error.
+- **Rate limit and lockout** (section 3). Ten handshake attempts a minute per
+  source address, and a listener-wide lock once one address sends more than five
+  `hello`s that never become a pairing. It is decided before a byte is decrypted,
+  which is what makes refusing cheap and also why the phone is only ever told by
+  the socket closing; `docs/windows.md` has the numbers and the trade-offs.
 - **Secrets.** The long-term key goes through `default_secret_store()`, which on
   Windows is the per-user Credential Manager - the key is never a file. That
   hides it from backups and from a second account on the machine, not from
